@@ -54,3 +54,25 @@ input,select{min-width:0;max-width:100%;background:var(--bg);border:1px solid va
 @media(max-width:580px){.heading{align-items:start;flex-direction:column}.split{grid-template-columns:minmax(0,1fr)}.stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.content,.topbar{padding-left:13px;padding-right:13px}.content{padding-top:19px;gap:11px}.setup{flex-wrap:wrap}.setup .button{margin-left:0}.panel{padding:13px}.anatomy svg{height:180px}.search kbd{display:none}}
 @media(max-width:580px){.setup{display:grid;grid-template-columns:auto 1fr;align-items:start}.setup .button{grid-column:2;justify-self:start}.trend svg{min-height:150px}.mobile-nav a,.mobile-nav button{min-height:44px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+*{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--muted) 42%,var(--panel)) transparent}
+.workspace.theme-dark{--bg:#0c1014;--sidebar:#10151b;--panel:#141a21;--raised:#202933;--line:#2a3541;--text:#f1f5f8;--muted:#a5b3bf;--accent:#b9ed7f}
+.workspace.theme-light{--bg:#f2f5f7;--sidebar:#f8fafb;--panel:#fff;--raised:#e8eef2;--line:#d3dde4;--text:#18242d;--muted:#4d616d;--accent:#38651d}
+.sidebar{overflow-y:auto;overflow-x:hidden;gap:17px}
+.topbar{position:sticky;top:0;z-index:1;height:49px;background:var(--bg)}
+.content{grid-template-columns:minmax(0,1fr);padding-top:22px;gap:13px}
+.content h1{font-size:clamp(1.8rem,3.1vw,2.65rem);letter-spacing:-.052em;line-height:1.1}
+.stat{padding:10px 12px}.stat strong{font-size:clamp(1.1rem,2.15vw,1.65rem);overflow-wrap:anywhere}
+.panel{padding:13px 15px}.panel-head{margin-bottom:10px}
+.row>span:last-child,.rows summary>span:last-child{text-align:right}
+.chart-data summary{cursor:pointer;width:fit-content;padding:4px 8px;border:1px solid var(--line);background:var(--raised);border-radius:6px}
+.mobile-nav a[aria-current=page]{background:var(--raised);border-radius:7px;color:var(--accent)}
+@media(max-width:580px){.topbar{height:45px}.content{padding-top:16px}.facts{grid-template-columns:minmax(0,1fr) minmax(0,1.5fr)}.range{max-width:100%;flex-wrap:wrap}}
+
+.training-calendar{display:grid;gap:14px}.calendar-controls{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px}.calendar-controls label{display:flex;align-items:center;gap:6px;font-size:.83rem;color:var(--muted)}
+.range button{border:0;background:transparent;color:var(--muted);padding:5px 9px;border-radius:5px;font-size:.81rem}.range button[aria-pressed=true]{background:var(--raised);color:var(--accent)}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}.calendar-grid>small{text-align:center}.calendar-day{min-width:0;min-height:70px;text-align:left;display:flex;flex-direction:column;align-items:start;gap:4px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 7px}.calendar-day[data-outside]{color:var(--muted);background:transparent}.calendar-day:hover,.calendar-day[aria-pressed=true],.calendar-year button[aria-pressed=true]{border-color:var(--accent)}.calendar-day[aria-current=date] strong{color:var(--accent)}.calendar-session{font-size:.75rem;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--raised);border-radius:3px;padding:2px 4px}
+.calendar-year{display:grid;grid-template-rows:20px repeat(7,14px);gap:3px;min-width:max-content;padding:2px 5px 5px}.calendar-year small{font-size:.66rem;white-space:nowrap}.calendar-year .heat-cell{display:block;width:100%;height:100%;padding:0}.calendar-year button[data-outside]{visibility:hidden}.calendar-year .heat-cell:hover{outline:1px solid var(--accent)}.calendar-year .heat-cell[aria-current=date]{outline:1px solid var(--accent)}.calendar-agenda{border-top:1px solid var(--line);padding-top:10px}.calendar-agenda h3{margin-bottom:6px}
+@media(max-width:580px){.calendar-day{padding:4px;min-height:54px;font-size:.78rem}.calendar-session{padding:2px;font-size:.65rem}.calendar-week .calendar-day small{font-size:.63rem}}
+
+.chart-controls{display:flex;align-items:center;gap:8px;margin-bottom:8px}.replay{display:grid;gap:14px}.replay section{padding-left:13px;border-left:2px solid var(--line);scroll-margin-top:64px}.replay tr{scroll-margin-top:64px}.replay :target{background:var(--raised);outline:1px solid var(--accent)}.detail a:hover,.replay a:hover{text-decoration:underline}

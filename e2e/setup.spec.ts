@@ -14,6 +14,8 @@ test('setup dashboard and keyboard search',async({page},info)=>{
   await page.getByRole('textbox',{name:'Find a page'}).fill('muscle');
   await page.getByRole('dialog').getByRole('link',{name:'Muscle analytics'}).click();
   await expect(page.getByRole('heading',{name:'Full body overview'})).toBeVisible();
+  await expect(page.getByRole('navigation').getByRole('link',{name:'Dashboard'}).first()).not.toHaveAttribute('aria-current','page');
+  await expect(page.getByRole('navigation').getByRole('link',{name:'Muscle analytics'}).first()).toHaveAttribute('aria-current','page');
   await page.getByRole('link',{name:'Chest 0 direct · 0 secondary',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Chest',exact:true})).toBeVisible();
   expect(exceptions).toEqual([]);
@@ -22,4 +24,23 @@ test('unconfigured private workspace renders no account data',async({page})=>{
   await page.goto('/app/workouts');
   await expect(page).toHaveURL('/');
   await expect(page.getByRole('heading',{name:'Dashboard'})).toBeVisible();
+});
+
+test('calendar switches periods, views and weekday order without page overflow',async({page})=>{
+  await page.goto('/?tab=calendar');
+  const today=page.locator('.calendar-grid [aria-current=date]:not([data-outside])');
+  await expect(today).toBeVisible();
+  await expect(today).toHaveAttribute('aria-pressed','true');
+  await page.getByRole('button',{name:'Previous period'}).click();
+  await expect(today).toHaveCount(0);
+  await page.getByRole('button',{name:'Today',exact:true}).click();
+  await expect(today).toHaveAttribute('aria-pressed','true');
+  await page.getByRole('button',{name:'Week',exact:true}).click();
+  await expect(page.locator('.calendar-day')).toHaveCount(7);
+  await page.getByRole('checkbox',{name:'Monday first'}).uncheck();
+  await expect(page.locator('.calendar-grid > small').first()).toHaveText('Sun');
+  await page.getByRole('button',{name:'Year',exact:true}).click();
+  await page.getByLabel('Heatmap metric').selectOption('sets');
+  await expect(page.getByText('Working sets per day', {exact:false})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

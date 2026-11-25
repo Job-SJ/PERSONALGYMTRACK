@@ -65,33 +65,34 @@ export function streaks(workouts:Workout[], today:string) {
   return {longest,current:previous===today || previous===shiftDay(today,-1) ? run : 0};
 }
 export function bestRecords(workouts:Workout[], templates:Map<string,Template>) {
-  const records: {key:string; title:string; metric:string; value:number; workout:string; at:string}[]=[];
+  const records: {key:string; title:string; metric:string; value:number; workout:string; at:string; previous:number|null; exercisePosition:number; setPosition?:number}[]=[];
   const best = new Map<string,number>();
   for (const w of [...workouts].sort((a,b)=>Date.parse(a.started_at)-Date.parse(b.started_at)||a.id.localeCompare(b.id))) {
-    const session = new Map<string,{title:string;metric:string;value:number}>();
+    const session = new Map<string,{title:string;metric:string;value:number;exercisePosition:number;setPosition?:number}>();
     for (const e of w.workout_exercises) {
       const template=templates.get(e.template_id);
-      const add=(metric:string,value:number|null|undefined) => {
+      const add=(metric:string,value:number|null|undefined,setPosition?:number) => {
         if (value==null || value<=0) return;
         const key=e.template_id+'|'+metric;
-        if (value>(session.get(key)?.value ?? 0)) session.set(key,{title:e.title,metric,value});
+        if (value>(session.get(key)?.value ?? 0)) session.set(key,{title:e.title,metric,value,exercisePosition:e.position,setPosition});
       };
       const volumes:number[]=[];
       for (const s of e.workout_sets.filter(working)) {
         const load=volume(s,template);
         if (load!=null) volumes.push(load);
         if (loaded(template)) {
-          add('Max weight',s.weight_kg);
-          if (s.reps && s.weight_kg!=null) add(s.reps+'-rep weight',s.weight_kg);
-          add('Estimated 1RM',estimate(s.weight_kg ?? 0,s.reps ?? 0));
+          add('Max weight',s.weight_kg,s.position);
+          if (s.reps && s.weight_kg!=null) add(s.reps+'-rep weight',s.weight_kg,s.position);
+          add('Estimated 1RM',estimate(s.weight_kg ?? 0,s.reps ?? 0),s.position);
         }
-        if (template?.type==='bodyweight_reps' && !s.weight_kg) add('Bodyweight reps',s.reps);
+        if (template?.type==='bodyweight_reps' && !s.weight_kg) add('Bodyweight reps',s.reps,s.position);
       }
       if (volumes.length) add('Exercise volume',sum(volumes));
     }
     for (const [key,r] of session) if (r.value>(best.get(key) ?? 0)) {
+      const previous=best.get(key)??null;
       best.set(key,r.value);
-      records.push({key,...r,workout:w.id,at:w.started_at});
+      records.push({key,...r,workout:w.id,at:w.started_at,previous});
     }
   }
   return records.reverse();

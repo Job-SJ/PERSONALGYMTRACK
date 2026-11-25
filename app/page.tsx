@@ -8,7 +8,7 @@ export default async function Home({searchParams}:{searchParams:Promise<{tab?:st
     const {tab,days,muscle}=await searchParams;
     const data={workouts:[],templates:new Map(),measurements:[]};
     const range=rangeValue(days);
-    return <Shell preview>{tab==='integrations'?<IntegrationView available={false} syncAt={null} preview/>:
+    return <Shell preview previewTab={tab==='dashboard'?'':tab}>{tab==='integrations'?<IntegrationView available={false} syncAt={null} preview/>:
     tab==='body'?<Body rows={[]} preview/>:tab==='goals'?<GoalView goals={[]} workouts={[]} rows={[]} preview/>:
     tab==='settings'?<SettingsView theme="dark" preview/>:
     tab && tab!=='dashboard'?<TrainingView data={data} tab={tab} slug={tab==='muscles'?muscle:undefined} days={range} preview/>:

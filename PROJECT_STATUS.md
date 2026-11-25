@@ -1,5 +1,15 @@
 # Project status
 
+## Premium upgrade
+
+The working baseline is preserved on main at a80a11f. Upgrade work is on feature/premium-fitness-intelligence.
+
+- Milestone A implements UTF-8 volume units, Amsterdam-local workout dates, browser-scoped UK and Dutch formatting preferences, active navigation, compact theme styling, and comparisons over matching completed days. The current weekly volume point uses an open marker. Relative strength uses an eligible estimated 1RM and an owner-visible weigh-in on or within seven days before the session.
+- Local lint, TypeScript, 16 Vitest tests, the Node.js 22 production build and six Chromium setup and calendar checks across desktop and mobile passed. Inspected the dark setup dashboard on desktop and mobile. Hosted reconciliation, authenticated visual checks and live sync remain pending. The hosted CLI could not inspect migration history because the direct database connection requires IPv6.
+
+- Milestone B is in progress. The calendar has selectable month, week and year views, local-date navigation, a session agenda and workout links. Exercise pages add a detail scale, original session links and rep-count records with prior bests. Workout Replay displays recorded set order, loads, reps, RPE, muscle mapping and records. The dashboard switches between six training and bodyweight metrics.
+- Remaining product work includes deeper muscle and exercise analytics, equivalent-period chart comparisons, workout comparisons, nutrition and its migrations, Performance Lab, Body Evolution integration and Daily Briefing.
+
 ## Milestone 1 verification update
 
 - All four required values are populated in the ignored local environment file. The Supabase connection and owner UUID passed format checks. The hosted Auth API accepted the publishable key and reported that public signup is enabled. PostgREST returned `PGRST205` for `sync_state`, so the application schema could not be verified on the hosted instance.

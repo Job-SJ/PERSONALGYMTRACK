@@ -1,4 +1,6 @@
 'use server';
+import {cookies} from 'next/headers';
+import {localeCookie,resolveLocale} from '../lib/format';
 import {redirect} from 'next/navigation';
 import {revalidatePath} from 'next/cache';
 import {z} from 'zod';
@@ -129,5 +131,6 @@ export async function preferences(form:FormData) {
   const theme=z.enum(['dark','light','oled']).safeParse(form.get('theme'));
   if (!theme.success) return back('settings','Select a theme.');
   const result=await client.from('preferences').upsert({user_id:user.id,theme:theme.data});
+  if (!result.error) (await cookies()).set(localeCookie,resolveLocale(String(form.get('locale'))),{path:'/',httpOnly:true,sameSite:'lax',maxAge:31536000});
   back('settings',result.error?'Preferences could not be saved.':'Preferences saved.');
 }
