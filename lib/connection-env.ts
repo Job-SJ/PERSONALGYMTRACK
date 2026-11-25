@@ -13,3 +13,12 @@ export function publicSupabase(url?:string,key?:string) {
     return null;
   }
 }
+
+const urlVariable = 'NEXT_PUBLIC_SUPABASE_URL';
+const keyVariable = 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY';
+
+export function configuredSupabase(env = process.env) {
+  // Both callers run on the server. Read the environment at request time so
+  // credentials configured after a production build are picked up on restart.
+  return publicSupabase(env[urlVariable], env[keyVariable]);
+}

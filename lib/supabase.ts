@@ -2,9 +2,9 @@ import 'server-only';
 import {createServerClient} from '@supabase/ssr';
 import {cookies} from 'next/headers';
 import {redirect} from 'next/navigation';
-import {publicSupabase} from './connection-env';
+import {configuredSupabase} from './connection-env';
 
-export const config=()=>publicSupabase(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+export const config=()=>configuredSupabase();
 export const configured=()=>Boolean(config());
 export async function db() {
   const connection=config();

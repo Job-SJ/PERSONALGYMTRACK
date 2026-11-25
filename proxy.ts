@@ -1,6 +1,6 @@
 import {createServerClient} from '@supabase/ssr';
 import {NextResponse,type NextRequest} from 'next/server';
-import {publicSupabase} from './lib/connection-env';
+import {configuredSupabase} from './lib/connection-env';
 export async function proxy(request:NextRequest) {
   const nonce=Buffer.from(crypto.randomUUID()).toString('base64');
   const dev=process.env.NODE_ENV==='development';
@@ -9,7 +9,7 @@ export async function proxy(request:NextRequest) {
   headers.set('content-security-policy',csp);
   headers.set('x-nonce',nonce);
   let response=NextResponse.next({request:{headers}});
-  const connection=publicSupabase(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+  const connection=configuredSupabase();
   if (connection) {
     const client=createServerClient(connection.url,connection.key,{cookieOptions:{httpOnly:true},cookies:{getAll:()=>request.cookies.getAll(),setAll:items=>{
       for (const {name,value} of items) request.cookies.set(name,value);
