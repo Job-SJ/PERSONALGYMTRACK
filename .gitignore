@@ -1,0 +1,18 @@
+node_modules/
+.next/
+.npm-cache/
+.env*
+!.env.example
+*.tsbuildinfo
+playwright-report/
+test-results/
+Wachtwoord Database/
+/test
+private-exports/
+.vercel/
+/.pgt-checkout/
+/supabase/.temp/
+/supabase/.branches/
+*.pem
+*.pfx
+*.pgdump
