@@ -23,6 +23,7 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
     expect(tableCheck.rows).toHaveLength(8);
     for(const table of tableCheck.rows) expect(table).toMatchObject({
       rls_enabled:true,owner_policies:1,restrictive_policies:1,anon_select:false,
+      authenticated_select:true,authenticated_insert:true,authenticated_update:true,authenticated_delete:true,
     });
     expect(policies.rows).toHaveLength(16);
     expect(constraints.rows).toEqual(expect.arrayContaining([
