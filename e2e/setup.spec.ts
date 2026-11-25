@@ -53,3 +53,17 @@ test('calendar switches periods, views and weekday order without page overflow',
   await expect(page.getByText('Working sets per day', {exact:false})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+test('dashboard links to the calendar and training analytics uses the metric picker',async({page})=>{
+  await page.goto('/');
+  await page.getByRole('link',{name:'Open training calendar'}).click();
+  await expect(page.getByRole('heading',{name:'Training calendar'})).toBeVisible();
+  await expect(page.getByRole('group',{name:'Calendar view'})).toBeVisible();
+
+  await page.goto('/?tab=analytics');
+  await expect(page.getByRole('heading',{name:'Training analytics'})).toBeVisible();
+  const metric=page.getByLabel('Chart metric');
+  await metric.selectOption('weight');
+  await expect(metric).toHaveValue('weight');
+  await expect(page.getByText('No observations in this range')).toBeVisible();
+});
