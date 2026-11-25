@@ -2,6 +2,7 @@
 
 import {useState} from 'react';
 import Link from 'next/link';
+import {useRouter} from 'next/navigation';
 import {ChevronLeft, ChevronRight} from 'lucide-react';
 import {shiftDay, weekKey} from '../lib/analytics';
 import {formatDate, formatNumber, type Locale} from '../lib/format';
@@ -20,6 +21,7 @@ const yearOffset = (day:string,offset:number) => String(Number(day.slice(0,4))+o
 const daysBetween = (start:string,end:string) => Math.round((Date.parse(end)-Date.parse(start))/86_400_000);
 
 export function TrainingCalendar({sessions,today,locale}:{sessions:CalendarSession[];today:string;locale:Locale}) {
+  const router=useRouter();
   const [view,setView] = useState<View>('Month');
   const [anchor,setAnchor] = useState(today);
   const [selected,setSelected] = useState(today);
@@ -41,7 +43,7 @@ export function TrainingCalendar({sessions,today,locale}:{sessions:CalendarSessi
   }
   const value = (rows:CalendarSession[],key:Metric) => key==='workouts'?rows.length:rows.reduce((total,row)=>total+row[key],0);
   const inPeriod = sessions.filter(s=>s.day>=start&&s.day<end);
-  const max = Math.max(0,...days.map(day=>value(byDay.get(day)??[],metric)));
+  const max = Math.max(0,...days.filter(day=>day>=start&&day<end&&day<=today).map(day=>value(byDay.get(day)??[],metric)));
   const current = today>=start&&today<end;
   const weekDays = days.slice(0,7);
   const dateLabel = (day:string) => formatDate(day,locale,{day:'numeric',month:'long',year:'numeric'});
@@ -50,20 +52,20 @@ export function TrainingCalendar({sessions,today,locale}:{sessions:CalendarSessi
     setAnchor(next);
     setSelected(next);
   };
-  const matchedDays = view==='Week'?Math.max(0,Math.min(7,daysBetween(start,today))):0;
-  const priorStart = shiftDay(start,-7);
+  const priorStart = view==='Month'?monthOffset(start,-1):shiftDay(start,-7);
+  const matchedDays = view==='Year'?0:Math.max(0,Math.min(daysBetween(start,end),daysBetween(priorStart,start),daysBetween(start,today)));
   const prior = sessions.filter(s=>s.day>=priorStart&&s.day<shiftDay(priorStart,matchedDays));
   const elapsed = inPeriod.filter(s=>s.day<shiftDay(start,matchedDays));
 
   function cell(day:string) {
     const rows = byDay.get(day)??[];
     const n = value(rows,metric);
-    const level = n===0?0:Math.ceil(3*n/max);
+    const level = n===0||max===0?0:Math.min(3,Math.ceil(3*n/max));
     const out = day<start||day>=end;
     const label = dateLabel(day)+', '+(day>today?'upcoming':view==='Year'?`${formatNumber(n,1,locale)} ${metrics[metric].toLowerCase()}`:rows.length?`${rows.length} workout${rows.length===1?'':'s'}`:'no workouts recorded');
     return <button className={view==='Year'?'heat-cell heat-'+level:'calendar-day'} key={day} type="button"
       aria-label={label} title={label} aria-pressed={selected===day} aria-current={day===today?'date':undefined}
-      data-outside={out||undefined} disabled={view==='Year'&&out} onClick={()=>{setSelected(day);if(out)setAnchor(day);}}>
+      data-outside={out||undefined} data-future={day>today||undefined} disabled={view==='Year'&&out} onClick={()=>{setSelected(day);if(out)setAnchor(day);if(rows.length===1)router.push('/app/workouts/'+encodeURIComponent(rows[0].id));}}>
       {view!=='Year'&&<><strong>{Number(day.slice(-2))}</strong>{rows.map(row=><span key={row.id} className="calendar-session">{row.title}</span>)}{view==='Week'&&day<=today&&!rows.length&&<small>No workout</small>}</>}
     </button>;
   }
@@ -97,8 +99,8 @@ export function TrainingCalendar({sessions,today,locale}:{sessions:CalendarSessi
       {weekDays.map(day=><small key={day}>{formatDate(day,locale,{weekday:'short'})}</small>)}
       {days.map(cell)}
     </div>}
-    <p className="muted">{formatNumber(inPeriod.length,0,locale)} workouts / {formatNumber(value(inPeriod,'sets'),0,locale)} working sets / {formatNumber(value(inPeriod,'minutes'),0,locale)} min</p>
-    {matchedDays>0&&sessions.some(s=>s.day<=priorStart)&&<p className="muted">First {matchedDays} completed days vs previous week: {elapsed.length} vs {prior.length} workouts / {value(elapsed,'sets')} vs {value(prior,'sets')} working sets / {formatNumber(value(elapsed,'minutes'),0,locale)} vs {formatNumber(value(prior,'minutes'),0,locale)} min.</p>}
+    <dl className="calendar-totals">{(Object.keys(metrics) as Metric[]).map(key=><div key={key}><dt>{metrics[key]}</dt><dd>{formatNumber(value(inPeriod,key),0,locale)}</dd></div>)}</dl>
+    {matchedDays>0&&sessions.some(s=>s.day<=priorStart)&&<p className="muted">First {matchedDays} completed days vs previous {view.toLowerCase()}: {elapsed.length} vs {prior.length} workouts / {value(elapsed,'sets')} vs {value(prior,'sets')} working sets / {formatNumber(value(elapsed,'minutes'),0,locale)} vs {formatNumber(value(prior,'minutes'),0,locale)} min.</p>}
     <section className="calendar-agenda" aria-label="Selected date workouts">
       <h3>{dateLabel(selected)}</h3>
       {(byDay.get(selected)??[]).map(session=><div key={session.id}>

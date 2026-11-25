@@ -2,7 +2,7 @@ import {MetricChart} from './metric-chart';
 import {TrainingCalendar} from './training-calendar';
 import Link from 'next/link';
 import {Activity,CalendarDays,Clock3,Dumbbell,Flame,Layers3,Plug,Target,Trophy,Weight} from 'lucide-react';
-import {bestRecords,dayKey,estimate,loaded,movingAverage,muscles,muscleKey,muscleTotals,relativeStrength,shiftDay,streaks,sum,trainingFrequencyComparison,volume,weekKey,working,workoutMetrics} from '../lib/analytics';
+import {bestRecords,dayKey,estimate,loaded,matchedBodyweight,movingAverage,muscles,muscleSessions,muscleTotals,relativeStrength,shiftDay,streaks,sum,trainingFrequencyComparison,volume,weekKey,working,workoutMetrics} from '../lib/analytics';
 import {formatNumber,formatDate,formatUnit,type Locale} from '../lib/format';
 import {comparablePeriod} from '../lib/periods';
 import type {Goal,Measurement,Template,Workout} from '../lib/model';
@@ -99,7 +99,7 @@ export function Dashboard({workouts,templates,measurements,days,syncAt,locale='e
   return <><Heading section="TRAINING OVERVIEW" title="Dashboard" description="Your training volume, muscle distribution and recent activity." ><Range days={days} base={base}/></Heading>
   {preview&&<div className="setup"><span className="setup-icon"><Plug size={19}/></span><div><strong>Connect your training data</strong><p>Configure Supabase to import workouts and unlock your personal analytics.</p></div><Link href="/?tab=integrations" className="button">Integration setup</Link></div>}
   <Stats items={[{label:'Workouts',value:number(current.length,0,locale),note:`${number(thisWeek,0,locale)} this week · ${number(dates.filter(d=>d.startsWith(month)).length,0,locale)} this month (in progress)`,icon:Dumbbell},{label:'Recorded volume',value:values.length?formatUnit(sum(values),'kg × reps',1,locale):'—',note:'Supported working-set weight multiplied by reps',icon:Layers3},{label:'Training time',value:current.length?number(sum(m.map(v=>v.minutes))/60,1,locale)+' h':'—',note:current.length?number(sum(m.map(v=>v.minutes))/current.length)+' min / workout':'Across selected workouts',icon:Clock3},{label:'Working sets',value:number(sum(m.map(v=>v.sets)),0,locale),note:number(sum(m.map(v=>v.reps)),0,locale)+' recorded reps',icon:Activity}]}/>
-  <div className="split dashboard-primary"><Card title="Training performance" subtitle="Weekly training totals and dated weigh-ins"><DashboardChart workouts={current} templates={templates} measurements={measurements} days={days} locale={locale}/></Card><Card title="Muscle distribution" subtitle="Direct working sets by region" action={<Target size={17}/>}><Anatomy totals={totals} preview={preview}/><div className="legend">Direct sets <span>0 <i/><i/><i/> {Math.max(...Object.values(totals).map(t=>t.direct))||'—'}</span></div></Card></div>
+  <div className="split dashboard-primary"><Card title="Training performance" subtitle="Weekly training totals and dated weigh-ins"><DashboardChart workouts={current} templates={templates} measurements={measurements} days={days} locale={locale}/></Card><Card title="Muscle distribution" subtitle="Direct working sets by region" action={<Target size={17}/>}><Anatomy totals={totals} preview={preview} days={days} locale={locale}/><div className="legend">Direct sets <span>0 <i/><i/><i/> {Math.max(...Object.values(totals).map(t=>t.direct))||'—'}</span></div></Card></div>
   <div className="split lower"><Card title="Training activity" subtitle="Workouts recorded each day" action={<CalendarDays size={17}/>}><ActivityCalendar workouts={workouts}/></Card><Card title="Training patterns" subtitle="Equal elapsed periods exclude today" action={<Flame size={17}/>}><dl className="facts"><dt>Week in progress</dt><dd>{periodNote('week')}</dd><dt>Month in progress</dt><dd>{periodNote('month')}</dd><dt>Current / longest streak</dt><dd>{streak.current} / {streak.longest} days</dd><dt>Most direct sets</dt><dd>{top?muscles[top[0] as keyof typeof muscles]:'—'}</dd><dt>Workouts year to date</dt><dd>{dates.filter(d=>d.startsWith(year)).length}</dd><dt>Latest bodyweight</dt><dd>{weight?number(weight.value,1,locale)+' kg':'—'}</dd></dl></Card></div>
   <div className="split"><Card title="Recent workouts" subtitle={syncAt?'Last Hevy sync · '+short(syncAt,locale):'Hevy sync has yet to run'}><WorkoutRows workouts={current.slice(0,5)} templates={templates} locale={locale}/></Card><Card title="Latest personal records" action={<Trophy size={17}/>}><RecordRows locale={locale} records={recent}/></Card></div>
   {frequency&&<Card title="Training frequency insight" subtitle="Two consecutive 28-day periods, excluding today"><p>{frequency.current} workouts from {short(frequency.currentStart)} to {short(frequency.currentEnd)}, compared with {frequency.previous} from {short(frequency.priorStart)} to {short(frequency.priorEnd)}.</p><small>Counts reflect recorded workouts and depend on complete import coverage.</small></Card>}</>;
@@ -109,7 +109,11 @@ function WorkoutRows({workouts,templates,locale='en-GB'}:{workouts:Workout[];tem
   return workouts.length?<div className="rows">{workouts.map(w=>{const m=workoutMetrics(w,templates);return <details key={w.id}><summary><span><strong>{w.title}</strong><small>{short(w.started_at,locale)} · {number(m.minutes,0,locale)} min · {m.sets} working sets</small></span><span>{m.volume==null?'—':formatUnit(m.volume,'kg × reps',1,locale)}</span></summary><div className="detail"><Link className="quiet" href={workoutHref(w.id)}>Open workout</Link>{w.notes&&<p>{w.notes}</p>}{[...w.workout_exercises].sort((a,b)=>a.position-b.position).map(e=><section key={e.position} id={'exercise-'+e.position}><h3><Link href={'/app/exercises/'+encodeURIComponent(e.template_id)}>{e.title}</Link></h3>{e.notes&&<p>{e.notes}</p>}<table><thead><tr><th>Set</th><th>Load</th><th>Reps</th><th>Other</th><th>RPE</th></tr></thead><tbody>{[...e.workout_sets].sort((a,b)=>a.position-b.position).map(s=><tr key={s.position} id={'set-'+e.position+'-'+s.position}><td>{s.position+1} · {s.type}</td><td>{s.weight_kg==null?'—':number(s.weight_kg,2,locale)+' kg'}</td><td>{s.reps??'—'}</td><td>{s.duration_seconds!=null?s.duration_seconds+' s':s.distance_meters!=null?s.distance_meters+' m':'—'}</td><td>{s.rpe??'—'}</td></tr>)}</tbody></table></section>)}</div></details>;})}</div>:<Empty>No workouts in this view.</Empty>;
 }
 function RecordRows({records,locale='en-GB'}:{records:ReturnType<typeof bestRecords>;locale?:Locale}){
-  return records.length?<div className="rows">{records.map(r=><div className="row" key={r.key+r.workout}><span><strong>{r.title}</strong><small>{r.metric} · {short(r.at,locale)}</small></span><span>{number(r.value,1,locale)} {r.metric==='Bodyweight reps'?'reps':r.metric==='Exercise volume'?'kg × reps':'kg'}</span></div>)}</div>:<Empty>No comparable records are available yet.</Empty>;
+  return records.length?<div className="detail record-table"><table><thead><tr><th>Exercise</th><th>Record</th><th>Value</th><th>Workout</th></tr></thead><tbody>
+    {records.map(r=><tr key={r.key+r.workout}><td>{r.title}</td><td>{r.metric}</td><td>{formatUnit(r.value,r.metric==='Bodyweight reps'?'reps':r.metric==='Exercise volume'?'kg × reps':'kg',2,locale)}</td>
+    <td><Link href={workoutHref(r.workout)+(r.setPosition==null?'#exercise-'+r.exercisePosition:'#set-'+r.exercisePosition+'-'+r.setPosition)}>{short(r.at,locale,{dateStyle:'medium'})}</Link></td></tr>)}
+  </tbody></table></div>:<Empty>No comparable records are available yet.</Empty>;
+
 }
 function RecordMatrix({records,locale}:{records:ReturnType<typeof bestRecords>;locale:Locale}) {
   const best=new Map<number,(typeof records)[number]>();
@@ -124,8 +128,8 @@ function RecordMatrix({records,locale}:{records:ReturnType<typeof bestRecords>;l
 export function TrainingView({data,tab,slug,days,q,formula,preview=false}:{data:Data;tab:string;slug?:string;days:number;q?:string;formula?:string;preview?:boolean}){
   const {workouts,templates,locale='en-GB'}=data;
   const current=inRange(workouts,days);
-  const base=preview?'/?tab='+tab:'/app/'+tab+(slug?'/'+encodeURIComponent(slug):'');
-  const filter=<Range days={days} base={base}/>;
+  const base=preview?'/?tab='+tab+(slug&&tab==='muscles'?'&muscle='+encodeURIComponent(slug):''):'/app/'+tab+(slug?'/'+encodeURIComponent(slug):'');
+  const filter=<Range days={days} base={formula==='brzycki'?base+(base.includes('?')?'&':'?')+'formula=brzycki':base}/>;
   const list=new Map(workouts.flatMap(w=>w.workout_exercises.map(e=>[e.template_id,e.title] as const)));
   const rangeLabel='Selected period · Europe/Amsterdam';
   if(tab==='workouts'&&slug) {
@@ -187,22 +191,58 @@ export function TrainingView({data,tab,slug,days,q,formula,preview=false}:{data:
     const loads=sets.flatMap(s=>loaded(t)&&s.weight_kg!=null&&s.weight_kg>0?s.weight_kg:[]);
     const volumes=sets.flatMap(s=>volume(s,t)??[]);
     const latest=estimates.at(-1);
+    const matchedWeight=latest?matchedBodyweight(latest.at,data.measurements):null;
     const ratio=latest?relativeStrength(latest.value,latest.at,data.measurements):null;
     return <><Heading section="EXERCISE ANALYTICS" title={name} description={rangeLabel}>{filter}</Heading>
-    <Stats items={[{label:'Sessions',value:sessions.length},{label:'Max load',value:loads.length?number(Math.max(...loads),2,locale)+' kg':'—'},{label:'Recorded volume',value:volumes.length?formatUnit(sum(volumes),'kg × reps',1,locale):'—'},{label:'Latest relative strength',value:ratio==null?'—':number(ratio,2,locale)+'×',note:ratio!==null?'Estimated 1RM ÷ bodyweight on or within 7 days before the workout':latest?'No bodyweight recorded on or within 7 days before '+short(latest.at,locale):'No eligible estimated 1RM in this period'}]}/>
+    <Stats items={[{label:'Sessions',value:sessions.length},{label:'Max load',value:loads.length?number(Math.max(...loads),2,locale)+' kg':'—'},{label:'Recorded volume',value:volumes.length?formatUnit(sum(volumes),'kg × reps',1,locale):'—'},{label:'Latest relative strength',value:ratio==null?'—':number(ratio,2,locale)+'×',note:matchedWeight?'Matched '+formatUnit(matchedWeight.value,'kg',2,locale)+' on '+short(matchedWeight.day,locale):latest?'No bodyweight recorded on or within 7 days before '+short(latest.at,locale):'No eligible estimated 1RM in this period'}]}/>
     <Card title="Session progression" subtitle="External loads with 1–10 reps. Estimates depend on effort and technique." action={<Link className="button secondary" href={base+'?days='+days+'&formula='+(method==='epley'?'brzycki':'epley')}>{method==='epley'?'Use Brzycki':'Use Epley'}</Link>}><MetricChart series={exerciseSeries} locale={locale}/><RepMaxCalculator/></Card>
     <Card title="Exercise records"><RecordMatrix records={exerciseRecords} locale={locale}/></Card><Card title="Workout history"><WorkoutRows workouts={sessions} templates={templates} locale={locale}/></Card></>;
   }
   if(tab==='exercises') return <><Heading section="TRAINING" title="Exercise library" description="Exercises recorded in your workout history."/><Card title="Recorded exercises">{list.size?<div className="rows">{[...list].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,label])=><Link key={id} className="row" href={'/app/exercises/'+encodeURIComponent(id)}>{label}<Dumbbell size={15}/></Link>)}</div>:<Empty>Import workouts to populate the exercise library.</Empty>}</Card></>;
   if(tab==='muscles'){
     const totals=muscleTotals(current,templates), name=slug&&Object.hasOwn(muscles,slug)?muscles[slug as keyof typeof muscles]:undefined;
-    const matching=current.filter(w=>w.workout_exercises.some(e=>{const t=templates.get(e.template_id);return slug&&[t?.primary_muscle,...(t?.secondary_muscles??[])].some(k=>muscleKey(k)===slug)&&e.workout_sets.some(working);}));
-    const weekly=new Map<string,number>();
-    if(name&&slug) for(const w of matching){const week=weekKey(dayKey(w.started_at));const n=muscleTotals([w],templates)[slug].direct;weekly.set(week,(weekly.get(week)??0)+n);}
-    return <><Heading section="MUSCLE ANALYTICS" title={name||'Full body overview'} description="Direct and secondary working sets from exercise template mappings.">{filter}</Heading>
-      {name&&<Stats items={[{label:'Sessions',value:totals[slug!].sessions},{label:'Direct sets',value:totals[slug!].direct},{label:'Secondary sets',value:totals[slug!].secondary},{label:'Last trained in range',value:totals[slug!].last?short(totals[slug!].last!):'—'}]}/>}
-      <div className="split"><Card title={name?'Direct sets by week':'Muscle groups'}>{name?<Trend unit="working sets" points={[...weekly].sort().map(([day,value])=>({label:short(day),value,at:day}))}/>:<div className="rows">{Object.entries(muscles).map(([k,label])=><Link className="row" key={k} href={(preview?'/?tab=muscles&muscle=':'/app/muscles/')+k}>{label}<span>{totals[k].direct} direct · {totals[k].secondary} secondary</span></Link>)}</div>}</Card><Card title="Anatomical map"><Anatomy totals={totals} selected={slug} preview={preview}/></Card></div>
-      {name&&<Card title="Involving workouts"><WorkoutRows workouts={matching} templates={templates} locale={locale}/></Card>}</>;
+    if(!name||!slug) return <><Heading section="MUSCLE ANALYTICS" title="Full body overview" description="Working sets by primary and secondary exercise mapping.">{filter}</Heading>
+      <div className="split"><Card title="Muscle groups"><div className="rows">{Object.entries(muscles).map(([key,label])=><Link className="row" key={key} href={(preview?'/?tab=muscles&muscle='+key+'&days=':'/app/muscles/'+key+'?days=')+days}>{label}<span>{totals[key].direct} direct · {totals[key].secondary} secondary</span></Link>)}</div></Card>
+      <Card title="Anatomical map"><Anatomy totals={totals} preview={preview} days={days} locale={locale}/></Card></div></>;
+    const matching=muscleSessions(current,templates,slug);
+    const weekly=new Map<string,{direct:number;secondary:number;sessions:number;volume:number|null}>();
+    const exercises=new Map<string,{title:string;sets:number;points:{label:string;at:string;value:number;href:string}[]}>();
+    const mappedByWorkout=new Map<string,Set<string>>();
+    for(const {workout,exercises:involved} of [...matching].reverse()) {
+      const week=weekKey(dayKey(workout.started_at));
+      const row=weekly.get(week)??{direct:0,secondary:0,sessions:0,volume:null};
+      row.sessions++;
+      const bestLoads=new Map<string,number>();
+      for(const {exercise,template,sets,direct} of involved) {
+        row[direct?'direct':'secondary']+=sets.length;
+        const entry=exercises.get(exercise.template_id)??{title:exercise.title,sets:0,points:[]};
+        entry.sets+=sets.length;
+        exercises.set(exercise.template_id,entry);
+        for(const set of sets) {
+          const load=volume(set,template);
+          if(direct&&load!=null) row.volume=(row.volume??0)+load;
+          if(loaded(template)&&set.weight_kg!=null&&set.weight_kg>0) bestLoads.set(exercise.template_id,Math.max(bestLoads.get(exercise.template_id)??0,set.weight_kg));
+        }
+      }
+      for(const [id,value] of bestLoads) exercises.get(id)!.points.push({label:short(workout.started_at,locale),at:workout.started_at,value,href:workoutHref(workout.id)});
+      weekly.set(week,row);
+      mappedByWorkout.set(workout.id,new Set(involved.map(({exercise})=>exercise.template_id)));
+    }
+    const today=dayKey(new Date());
+    const weeklySeries=([{key:'direct',label:'Direct working sets',unit:'sets'},{key:'secondary',label:'Secondary working sets',unit:'sets'},{key:'volume',label:'Direct volume load',unit:'kg × reps'},{key:'sessions',label:'Training frequency',unit:'sessions'}] as const).map(metric=>({
+      ...metric,points:[...weekly].flatMap(([at,row])=>row[metric.key]==null?[]:[{at,label:short(at,locale),value:row[metric.key]!,incomplete:at===weekKey(today)||Boolean(days&&at<shiftDay(today,1-days))}]),
+    }));
+    const progression=[...exercises].filter(([,row])=>row.points.length).map(([key,row])=>({key,label:row.title,unit:'kg',points:row.points,detailScale:true}));
+    const records=bestRecords(workouts,templates).filter(record=>mappedByWorkout.get(record.workout)?.has(record.key.slice(0,record.key.lastIndexOf('|'))));
+    const loads=[...weekly.values()].flatMap(row=>row.volume??[]);
+    return <><Heading section="MUSCLE ANALYTICS" title={name} description="Working sets attributed using exercise mappings.">{filter}</Heading>
+      <Stats items={[{label:'Sessions',value:number(totals[slug].sessions,0,locale)},{label:'Direct sets',value:number(totals[slug].direct,0,locale)},{label:'Secondary sets',value:number(totals[slug].secondary,0,locale)},{label:'Direct volume load',value:formatUnit(loads.length?sum(loads):null,'kg × reps',1,locale)}]}/>
+      <div className="split"><Card title="Weekly training" subtitle="Direct volume sums supported working-set weight multiplied by repetitions."><MetricChart series={weeklySeries} locale={locale}/></Card>
+      <Card title="Anatomical map"><Anatomy totals={totals} selected={slug} preview={preview} days={days} locale={locale}/></Card></div>
+      <div className="split"><Card title="Exercise progression" subtitle="Maximum recorded working-set load per session.">{progression.length?<MetricChart series={progression} locale={locale} selectorLabel="Exercise"/>:<Empty>No supported loaded exercise observations in this period.</Empty>}</Card>
+      <Card title="Involving exercises">{exercises.size?<div className="rows">{[...exercises].sort((a,b)=>b[1].sets-a[1].sets).map(([id,row])=><Link className="row" key={id} href={'/app/exercises/'+encodeURIComponent(id)+'?days='+days}>{row.title}<span>{number(row.sets,0,locale)} sets</span></Link>)}</div>:<Empty>No mapped exercises in this period.</Empty>}</Card></div>
+      <Card title="Personal records in period"><RecordRows records={records} locale={locale}/></Card>
+      <Card title="Involving workouts"><WorkoutRows workouts={matching.map(({workout})=>workout)} templates={templates} locale={locale}/></Card></>;
   }
   if(tab==='wrapped'){
     const m=current.map(w=>workoutMetrics(w,templates)), totals=muscleTotals(current,templates);

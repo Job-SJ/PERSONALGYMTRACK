@@ -101,11 +101,28 @@ export function movingAverage(rows:Measurement[], day:string, window:number) {
   const values=rows.filter(r=>r.kind==='weight' && r.day<=day && r.day>=shiftDay(day,1-window)).map(r=>r.value);
   return values.length ? sum(values)/values.length : null;
 }
-export function relativeStrength(weight:number, at:string, rows:Measurement[]) {
+export function matchedBodyweight(at:string, rows:Measurement[]) {
   const day=dayKey(at);
-  const measurement=rows.filter(r=>r.kind==='weight' && r.day<=day && r.day>=shiftDay(day,-7) && r.value>0)
-    .sort((a,b)=>b.day.localeCompare(a.day))[0];
+  return rows.filter(r=>r.kind==='weight' && r.day<=day && r.day>=shiftDay(day,-7) && r.value>0)
+    .sort((a,b)=>b.day.localeCompare(a.day))[0]??null;
+}
+
+export function relativeStrength(weight:number, at:string, rows:Measurement[]) {
+  const measurement=matchedBodyweight(at,rows);
   return measurement && weight>0 ? weight/measurement.value : null;
+}
+
+export function muscleSessions(workouts:Workout[], templates:Map<string,Template>, muscle:string) {
+  return workouts.flatMap(workout=>{
+    const exercises=workout.workout_exercises.flatMap(exercise=>{
+      const template=templates.get(exercise.template_id);
+      const direct=muscleKey(template?.primary_muscle)===muscle;
+      const secondary=!direct&&(template?.secondary_muscles??[]).some(key=>muscleKey(key)===muscle);
+      const sets=exercise.workout_sets.filter(working);
+      return sets.length&&(direct||secondary)?[{exercise,template,sets,direct}]:[];
+    });
+    return exercises.length?[{workout,exercises}]:[];
+  });
 }
 
 export function trainingFrequencyComparison(workouts:Workout[], today:string) {

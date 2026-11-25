@@ -18,6 +18,10 @@ test('setup dashboard and keyboard search',async({page},info)=>{
   await expect(page.getByRole('navigation').getByRole('link',{name:'Muscle analytics'}).first()).toHaveAttribute('aria-current','page');
   await page.getByRole('link',{name:'Chest 0 direct · 0 secondary',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Chest',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Weekly training'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Exercise progression'})).toBeVisible();
+  await page.getByRole('link',{name:'30D',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Chest',exact:true})).toBeVisible();
   expect(exceptions).toEqual([]);
 });
 test('unconfigured private workspace renders no account data',async({page})=>{
@@ -26,8 +30,13 @@ test('unconfigured private workspace renders no account data',async({page})=>{
   await expect(page.getByRole('heading',{name:'Dashboard'})).toBeVisible();
 });
 
-test('calendar switches periods, views and weekday order without page overflow',async({page})=>{
+test('calendar switches periods, views and weekday order without page overflow',async({page},info)=>{
+  await page.emulateMedia({reducedMotion:'reduce'});
   await page.goto('/?tab=calendar');
+  await page.screenshot({path:info.outputPath('calendar-dark.png')});
+  await page.locator('.workspace').evaluate(node=>{node.classList.replace('theme-dark','theme-light');});
+  await expect(page.locator('.workspace')).toHaveCSS('background-color','rgb(242, 245, 247)');
+  await page.screenshot({path:info.outputPath('calendar-light.png')});
   const today=page.locator('.calendar-grid [aria-current=date]:not([data-outside])');
   await expect(today).toBeVisible();
   await expect(today).toHaveAttribute('aria-pressed','true');

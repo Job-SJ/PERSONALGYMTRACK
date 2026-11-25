@@ -76,3 +76,17 @@ input,select{min-width:0;max-width:100%;background:var(--bg);border:1px solid va
 @media(max-width:580px){.calendar-day{padding:4px;min-height:54px;font-size:.78rem}.calendar-session{padding:2px;font-size:.65rem}.calendar-week .calendar-day small{font-size:.63rem}}
 
 .chart-controls{display:flex;align-items:center;gap:8px;margin-bottom:8px}.replay{display:grid;gap:14px}.replay section{padding-left:13px;border-left:2px solid var(--line);scroll-margin-top:64px}.replay tr{scroll-margin-top:64px}.replay :target{background:var(--raised);outline:1px solid var(--accent)}.detail a:hover,.replay a:hover{text-decoration:underline}
+
+.workspace{--chart-average:#78bbfc;--chart-record:#f5bf65}
+.workspace.theme-light{--chart-average:#205c99;--chart-record:#9a5204}
+.content{animation:page-enter .2s ease-out}.sidebar nav a,.mobile-nav a,.row,.calendar-day,.range button,.region path{transition:background-color .16s,color .16s,border-color .16s,fill .16s}
+@keyframes page-enter{from{opacity:.65;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+a.row:hover,.rows summary:hover{background:var(--raised)}.sidebar nav a[aria-current=page]{box-shadow:inset 2px 0 var(--accent)}
+.content .heading{margin:0 0 3px}.panel-head p{line-height:1.35}.stat strong{letter-spacing:-.04em}
+.anatomy-contours{pointer-events:none;fill:none;stroke:var(--text);stroke-opacity:.24;stroke-width:.65;stroke-linecap:round}.region:focus-visible path{stroke:var(--text);stroke-width:2px}.anatomy svg{height:205px}
+.calendar-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;border:1px solid var(--line);border-radius:8px}.calendar-totals div{padding:6px 10px}.calendar-totals div+div{border-left:1px solid var(--line)}.calendar-totals dt{font-size:.78rem;color:var(--muted)}.calendar-totals dd{margin:0;font-size:1.15rem;font-weight:700;font-variant-numeric:tabular-nums}.calendar-year [data-future],.calendar-day[data-future]{opacity:.5}.calendar-session{border-inline-start:2px solid var(--accent)}
+.chart-options{flex-wrap:wrap}.chart-options label{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:.82rem}.chart-options button:disabled{opacity:.55;cursor:default}.trend svg{background:transparent;touch-action:pan-y}.record-marker{fill:var(--chart-record);stroke:var(--panel)}.average-label::before{content:'';display:inline-block;margin-right:6px;width:15px;border-top:2px dashed var(--chart-average)}
+.record-table td:nth-child(3),.record-table th:nth-child(3){white-space:nowrap}.record-table a{text-decoration:underline;text-underline-offset:3px}
+@media(max-width:580px){.anatomy svg{height:170px}.chart-controls select{padding:5px}.record-table td,.record-table th{font-size:.75rem}.calendar-totals div{padding:6px}.content .heading{gap:8px}}
+
+.trend .plot-tooltip{top:42%;z-index:1}.trend .plot-tooltip,.trend .plot-empty{max-width:96%}
