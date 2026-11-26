@@ -1,10 +1,13 @@
+import {Suspense} from 'react';
+import {DailyIntelligence,IntelligenceLoading} from './daily-intelligence';
+import type {IntelligencePeriod} from '../lib/daily-intelligence';
+import type {diaryCalories} from '../lib/nutrition';
 import {MetricChart} from './metric-chart';
 import {TrainingCalendar} from './training-calendar';
 import Link from 'next/link';
-import {Activity,CalendarDays,Clock3,Dumbbell,Layers3,Plug,Target,Weight} from 'lucide-react';
-import {bestRecords,dayKey,estimate,loaded,matchedBodyweight,movingAverage,muscles,muscleSessions,muscleTotals,relativeStrength,shiftDay,streaks,sum,trainingFrequencyComparison,volume,weekKey,working,workoutMetrics} from '../lib/analytics';
+import {Activity,CalendarDays,Dumbbell,Plug,Target,Weight} from 'lucide-react';
+import {bestRecords,dayKey,estimate,loaded,matchedBodyweight,movingAverage,muscles,muscleSessions,muscleTotals,relativeStrength,shiftDay,streaks,sum,volume,weekKey,working,workoutMetrics} from '../lib/analytics';
 import {formatNumber,formatDate,formatUnit,type Locale} from '../lib/format';
-import {comparablePeriod} from '../lib/periods';
 import type {Goal,Measurement,Template,Workout} from '../lib/model';
 import {Anatomy} from './anatomy';
 import {Trend} from './charts';
@@ -74,39 +77,39 @@ function TrainingPerformanceChart({workouts,templates,measurements,days,locale='
   const weights=measurements.filter(r=>r.kind==='weight'&&r.day<=today&&(!rangeStart||r.day>=rangeStart)).sort((a,b)=>a.day.localeCompare(b.day));
   return <MetricChart locale={locale} series={[...series,{key:'weight',label:'Bodyweight',unit:'kg',detailScale:true,points:weights.map(r=>({label:short(r.day,locale),at:r.day,value:r.value}))}]}/>;
 }
-export function Dashboard({workouts,templates,measurements,days,syncAt,locale='en-GB',preview=false,nutrition}:Data&{days:number;syncAt:string|null;preview?:boolean;nutrition?:React.ReactNode}){
+export function Dashboard({workouts,templates,measurements,days,intelligence,syncAt,locale='en-GB',preview=false,nutrition,diary,
+  updatedAt=new Date().toISOString(),today=dayKey(updatedAt)}:Data&{
+    days:number;intelligence:IntelligencePeriod;syncAt:string|null;preview?:boolean;nutrition?:React.ReactNode;
+    diary?:Promise<ReturnType<typeof diaryCalories>|null>;updatedAt?:string;today?:string;
+  }){
   const current=inRange(workouts,days), totals=muscleTotals(current,templates);
-  const m=current.map(w=>workoutMetrics(w,templates));
-  const values=m.flatMap(v=>v.volume??[]);
-  const today=dayKey(new Date()), week=weekKey(today), month=today.slice(0,7), year=today.slice(0,4);
-  const dates=workouts.map(w=>dayKey(w.started_at)).filter(d=>d<=today);
-  const streak=streaks(workouts,today);
-  const recent=bestRecords(workouts,templates).slice(0,5);
-  const base=preview?'/?tab=dashboard':'/app';
-  const weight=measurements.filter(r=>r.kind==='weight').sort((a,b)=>b.day.localeCompare(a.day))[0];
-  const thisWeek=dates.filter(d=>d>=week).length;
-  const periodNote=(kind:'week'|'month')=>{
-    const p=comparablePeriod(today,kind);
-    if (!p.elapsed || !dates.some(d=>d<=p.previous)) return 'Comparison unavailable';
-    const count=(start:string,end:string)=>dates.filter(d=>d>=start&&d<end).length;
-    return `${number(count(p.start,p.end),0,locale)} vs ${number(count(p.previous,p.previousEnd),0,locale)} workouts · first ${p.elapsed} completed ${p.elapsed===1?'day':'days'}`;
-  };
-  const frequency=trainingFrequencyComparison(workouts,today);
-  const top=Object.entries(totals).sort((a,b)=>b[1].direct-a[1].direct).find(([,v])=>v.direct>0);
-  return <><Heading section="TRAINING OVERVIEW" title="Dashboard" description="Your training volume, muscle distribution and recent activity." ><Range days={days} base={base}/></Heading>
+  const records=bestRecords(workouts.filter(workout=>dayKey(workout.started_at)<=today),templates);
+  const base=(preview?'/?tab=dashboard':'/app')+(preview?'&':'?')+'intelligence='+intelligence;
+  return <>
+  <Suspense fallback={<IntelligenceLoading/>}>
+    <DailyIntelligence input={{workouts,templates,measurements,records,today,days:intelligence,locale}}
+      diary={diary} chartDays={days} preview={preview} updatedAt={updatedAt}/>
+  </Suspense>
   {preview&&<div className="setup"><span className="setup-icon"><Plug size={19}/></span><div><strong>Connect your training data</strong><p>Configure Supabase to import workouts and unlock your personal analytics.</p></div><Link href="/?tab=integrations" className="button">Integration setup</Link></div>}
-  <div className="dashboard-stats"><Stats items={[{label:'Workouts',value:number(current.length,0,locale),note:`${number(thisWeek,0,locale)} this week · ${number(dates.filter(d=>d.startsWith(month)).length,0,locale)} this month (in progress)`,icon:Dumbbell},{label:'Recorded volume',value:values.length?formatUnit(sum(values),'kg × reps',1,locale):'—',note:'Supported working-set weight multiplied by reps',icon:Layers3},{label:'Training time',value:current.length?number(sum(m.map(v=>v.minutes))/60,1,locale)+' h':'—',note:current.length?number(sum(m.map(v=>v.minutes))/current.length)+' min / workout':'Across selected workouts',icon:Clock3},{label:'Working sets',value:number(sum(m.map(v=>v.sets)),0,locale),note:number(sum(m.map(v=>v.reps)),0,locale)+' recorded reps',icon:Activity}]}/></div>
+
   <div className="split dashboard-primary">
-    <Card title="Training performance" subtitle="Weekly training totals and dated weigh-ins"><TrainingPerformanceChart workouts={current} templates={templates} measurements={measurements} days={days} locale={locale}/></Card>
+    <Card title="Training performance" subtitle="Weekly training totals and dated weigh-ins" action={<Range days={days} base={base}/>}>
+      <TrainingPerformanceChart workouts={current} templates={templates} measurements={measurements} days={days} locale={locale}/>
+    </Card>
     <div className="dashboard-side">
-      <Card title="Muscle distribution" subtitle="Direct working sets by region" action={<Target size={17}/>}><Anatomy totals={totals} preview={preview} days={days} locale={locale}/><div className="legend">Direct sets <span>0 <i/><i/><i/> {Math.max(...Object.values(totals).map(t=>t.direct))||'—'}</span></div></Card>
+      <Card title="Muscle distribution" subtitle="Direct working sets by region" action={<Target size={17}/>}><Anatomy totals={totals} preview={preview} days={days} locale={locale}/><div className="legend">Direct sets <span>0 <i/><i/><i/> {Math.max(...Object.values(totals).map(t=>t.direct))||'?'}</span></div></Card>
       {nutrition}
-      <Card title="Latest personal records" action={<Link href={preview?'/?tab=records':'/app/records'} className="quiet">All records</Link>}><RecordRows locale={locale} records={recent.slice(0,3)}/></Card>
+      <Card title="Latest personal records" action={<Link href={preview?'/?tab=records':'/app/records'} className="quiet">All records</Link>}><RecordRows locale={locale} records={records.slice(0,3)}/></Card>
     </div>
   </div>
-  <div className="split lower"><Card title="Training activity" subtitle="Workouts recorded each day" action={<Link className="quiet" href={preview?'/?tab=calendar':'/app/calendar'}><CalendarDays size={16}/>Open training calendar</Link>}><ActivityCalendar workouts={workouts}/></Card><Disclosure title="Training patterns"><p className="muted">Comparisons cover equal elapsed periods and exclude today.</p><dl className="facts"><dt>Week in progress</dt><dd>{periodNote('week')}</dd><dt>Month in progress</dt><dd>{periodNote('month')}</dd><dt>Current / longest streak</dt><dd>{streak.current} / {streak.longest} days</dd><dt>Most direct sets</dt><dd>{top?muscles[top[0] as keyof typeof muscles]:'—'}</dd><dt>Workouts year to date</dt><dd>{dates.filter(d=>d.startsWith(year)).length}</dd><dt>Latest bodyweight</dt><dd>{weight?number(weight.value,1,locale)+' kg':'—'}</dd></dl></Disclosure></div>
-  <Card title="Recent workouts" subtitle={syncAt?'Last Hevy sync · '+short(syncAt,locale):'Hevy sync has yet to run'}><WorkoutRows workouts={current.slice(0,5)} templates={templates} locale={locale}/></Card>
-  {frequency&&<Card title="Training frequency insight" subtitle="Two consecutive 28-day periods, excluding today"><p>{frequency.current} workouts from {short(frequency.currentStart)} to {short(frequency.currentEnd)}, compared with {frequency.previous} from {short(frequency.priorStart)} to {short(frequency.priorEnd)}.</p><small>Counts reflect recorded workouts and depend on complete import coverage.</small></Card>}</>;
+  <div className="split lower">
+    <Card title="Training activity" subtitle="Workouts recorded each day" action={<Link className="quiet" href={preview?'/?tab=calendar':'/app/calendar'}><CalendarDays size={16}/>Open training calendar</Link>}>
+      <ActivityCalendar workouts={workouts}/>
+    </Card>
+    <Card title="Recent workouts" subtitle={syncAt?'Last Hevy sync ? '+short(syncAt,locale):undefined}>
+      <WorkoutRows workouts={current.slice(0,5)} templates={templates} locale={locale}/>
+    </Card>
+  </div></>;
 }
 const workoutHref=(id:string)=>'/app/workouts/'+encodeURIComponent(id);
 function WorkoutRows({workouts,templates,locale='en-GB'}:{workouts:Workout[];templates:Map<string,Template>;locale?:Locale}){

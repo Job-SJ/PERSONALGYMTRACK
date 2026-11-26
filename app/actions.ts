@@ -77,6 +77,7 @@ export async function sync(form:FormData) {
       status='Hevy connection verified.';
     } else {
       await runSync(client,user.id,key!);
+      revalidatePath('/app');
     }
   } catch(err) {
     status=err instanceof HevyError?err.message:'Synchronization failed.';

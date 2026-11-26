@@ -14,12 +14,12 @@ function readError(table:string,code:string,message:string):never {
   throw new WorkspaceReadError(safeCode,message);
 }
 
-export async function read<T>(client:SupabaseClient, table:string, fields:string, order:string, tie?:string, day?:string) {
+export async function read<T>(client:SupabaseClient, table:string, fields:string, order:string, tie?:string, dates?:{start:string;end:string}) {
   const result:T[]=[];
   for(let start=0;start<20000;start+=200){
     let query=client.from(table).select(fields).order(order,{ascending:false});
     if(tie) query=query.order(tie);
-    if(day) query=query.eq('day',day);
+    if(dates) query=query.gte('day',dates.start).lte('day',dates.end);
     const {data,error}=await query.range(start,start+199);
     if(error) readError(table,error.code,'Unable to load private workspace data.');
     if(!data) break;

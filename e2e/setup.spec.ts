@@ -5,7 +5,7 @@ test('setup dashboard and keyboard search',async({page},info)=>{
   page.on('console',message=>{if(message.type()==='error' && /hydration|content security policy/i.test(message.text())) exceptions.push(new Error(message.text()));});
   const response=await page.goto('/');
   expect(response?.headers()['content-security-policy']).toContain("'strict-dynamic'");
-  await expect(page.getByRole('heading',{name:'Dashboard'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Build your training baseline.'})).toBeVisible();
   await expect(page.getByText('No observations in this range')).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:info.outputPath('dashboard.png'),fullPage:true,caret:'initial'});
@@ -29,7 +29,21 @@ test('setup dashboard and keyboard search',async({page},info)=>{
 test('unconfigured private workspace renders no account data',async({page})=>{
   await page.goto('/app/workouts');
   await expect(page).toHaveURL('/');
-  await expect(page.getByRole('heading',{name:'Dashboard'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Build your training baseline.'})).toBeVisible();
+});
+
+test('daily intelligence keeps its period distinct from the dashboard chart range',async({page})=>{
+  await page.goto('/?days=365');
+  const period=page.getByRole('navigation',{name:'Intelligence period'});
+  await expect(period.getByRole('link',{name:'30 days'})).toHaveAttribute('aria-current','true');
+  await period.getByRole('link',{name:'7 days'}).click();
+  await expect(period.getByRole('link',{name:'7 days'})).toHaveAttribute('aria-current','true');
+  await expect(page).toHaveURL(/intelligence=7.*days=365/);
+  await expect(page.getByText('0 / 7 days')).toBeVisible();
+  await expect(page.getByRole('list',{name:'Training insights'})).toHaveCount(0);
+  await page.getByText('How it’s calculated').click();
+  await expect(page.getByText(/Each period uses completed days/)).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
 test('unauthenticated export redirects with private response headers',async({request})=>{
