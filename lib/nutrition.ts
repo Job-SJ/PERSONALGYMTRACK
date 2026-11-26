@@ -48,6 +48,23 @@ export function sumPortions(portions:Portion[], divisor=1):Values {
   return Object.fromEntries(nutrients.map(key=>[key,values.some(value=>value[key]==null)?null:values.reduce((sum,value)=>sum+(value[key]??0),0)/divisor]));
 }
 
+export function diaryCalories(entries:Pick<Entry,'day'|'portion'>[],complete:Set<string>,today:string){
+  const daily=new Map<string,{value:number;incomplete:boolean}>();
+  for(const {day,portion} of entries){
+    if(day!==today&&!complete.has(day)) continue;
+    const row=daily.get(day)??{value:0,incomplete:false};
+    const parsed=portionSchema.safeParse(portion);
+    const kcal=parsed.success?portionValues(parsed.data).kcal:null;
+    if(kcal==null||!Number.isFinite(kcal)) row.incomplete=true;
+    else row.value+=kcal;
+    daily.set(day,row);
+  }
+  return {
+    today:daily.get(today)??{value:0,incomplete:false},
+    trend:[...daily].flatMap(([day,row])=>day!==today&&!row.incomplete?[{day,value:row.value}]:[]),
+  };
+}
+
 export function shiftDay(day:string,offset:number){
   const date=new Date(day+'T12:00:00Z');
   date.setUTCDate(date.getUTCDate()+offset);

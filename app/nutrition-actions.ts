@@ -56,6 +56,7 @@ export async function saveNutrition(input:unknown){
   }
   if(result.error) return {error:'Could not save your nutrition data. Refresh the diary and try again.'};
   revalidatePath('/app/nutrition');
+  revalidatePath('/app');
   return {ok:true};
 }
 
