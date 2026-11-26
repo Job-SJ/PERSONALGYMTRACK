@@ -249,3 +249,15 @@ a.row:hover,.rows summary:hover{background:var(--raised)}.sidebar nav a[aria-cur
   .calendar-day{min-height:43px}
   .dashboard-primary .trend{min-height:0}
 }
+.dashboard-nutrition{display:flex;justify-content:space-between;align-items:center;gap:10px}.dashboard-nutrition p{font-size:.84rem}
+
+.dashboard-stats{background:var(--panel);border:1px solid var(--line);border-radius:9px}
+.dashboard-stats .stats{gap:0}
+.dashboard-stats .stat{background:transparent;border:0;border-radius:0}
+.dashboard-stats .stat+.stat{border-inline-start:1px solid var(--line)}
+.dashboard-primary{align-items:start}
+.dashboard-side{min-width:0;display:grid;gap:10px}
+@media(max-width:580px){
+  .dashboard-stats .stat:nth-child(3){border-inline-start:0}
+  .dashboard-stats .stat:nth-child(n+3){border-top:1px solid var(--line)}
+}

@@ -26,6 +26,6 @@ export function Anatomy({totals,preview=false,selected,days,locale='en-GB'}:{tot
     {paths.map(([key,d])=>{const count=totals[key]?.direct??0;const data=totals[key];
       const title=muscles[key]+' / '+formatNumber(count,0,locale)+' direct sets / '+formatNumber(data?.secondary??0,0,locale)+' secondary / '+formatNumber(data?.sessions??0,0,locale)+' sessions'+(data?.last?' / Last trained '+formatDate(data.last,locale):'');
       const href=preview?'/?tab=muscles&muscle='+key:'/app/muscles/'+key;
-      return <Link key={key} href={href+(days==null?'':(preview?'&':'?')+'days='+days)} aria-current={selected===key?'page':undefined} aria-label={title} className={'region '+(selected===key?'highlight':'')} style={{'--intensity':count?0.28+0.72*(count/max):0} as React.CSSProperties}><title>{title}</title><path d={d}/><path d={d} transform="translate(120 0) scale(-1 1)"/></Link>;
+      return <Link key={key} href={href+(days==null?'':(preview?'&':'?')+'days='+days)} aria-current={selected===key?'page':undefined} aria-label={title} className={'region '+(selected===key?'highlight':'')} style={{'--intensity':count?0.28+0.72*(count/max):0} as React.CSSProperties}><title>{title}</title>{key==='chest'&&<rect x="56" y="51" width="8" height="16" fill="transparent"/>}<path d={d}/><path d={d} transform="translate(120 0) scale(-1 1)"/></Link>;
     })}<g className="anatomy-contours" aria-hidden="true"><path d={contours[i]}/><path d={contours[i]} transform="translate(120 0) scale(-1 1)"/></g></svg><span>{i?'Back':'Front'}</span></div>)}</div>;
 }
