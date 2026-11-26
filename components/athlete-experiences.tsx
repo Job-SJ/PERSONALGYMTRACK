@@ -29,8 +29,10 @@ function Replay({data,query,preview}:{data:HistoryInput;query:AthleteQuery;previ
     {label:'Median estimated 1RM',earlier:baseline.estimated,later:recent.estimated,unit:'kg'},
     {label:'Highest recorded working load',earlier:baseline.load,later:recent.load,unit:'kg'},
     {label:'Median relative estimate',earlier:baseline.relative,later:recent.relative,unit:'× bodyweight'},
-    {label:'Recorded working-set volume',earlier:baseline.volume,later:recent.volume,unit:'kg × reps'},
   ].filter(metric=>metric.earlier!=null||metric.later!=null);
+  const volumeRow=(baseline.volume!=null||recent.volume!=null)&&<tr><th scope="row">Recorded working-set volume</th>
+    <td>{formatUnit(baseline.volume,'kg × reps',1,locale)}</td><td>{formatUnit(recent.volume,'kg × reps',1,locale)}</td></tr>;
+  const countRow=<tr><th scope="row">Recorded workouts</th><td>{formatNumber(baseline.workouts,0,locale)}</td><td>{formatNumber(recent.workouts,0,locale)}</td></tr>;
   return <>
     <form className="athlete-controls" action={preview?'/':'/app/analytics'} method="get" key={[selected?.id,length,windows.baseline.to,windows.recent.to].join('|')}>
       {preview&&<input type="hidden" name="tab" value="analytics"/>}
@@ -50,11 +52,20 @@ function Replay({data,query,preview}:{data:HistoryInput;query:AthleteQuery;previ
             <thead><tr><th>Measure</th><th>Earlier <small>{windowLabel(windows.baseline)}</small></th><th>Later <small>{windowLabel(windows.recent)}</small></th></tr></thead>
             <tbody>
               {metrics.map(metric=><tr key={metric.label}><th scope="row">{metric.label}</th><td>{formatUnit(metric.earlier,metric.unit,1,locale)}</td><td>{formatUnit(metric.later,metric.unit,1,locale)}</td></tr>)}
-              <tr><th scope="row">Recorded workouts</th><td>{formatNumber(baseline.workouts,0,locale)}</td><td>{formatNumber(recent.workouts,0,locale)}</td></tr>
-              {!!selected&&<tr><th scope="row">Estimated strength dates</th><td>{formatNumber(baseline.dates,0,locale)}</td><td>{formatNumber(recent.dates,0,locale)}</td></tr>}
-              {(baseline.relativeDates>0||recent.relativeDates>0)&&<tr><th scope="row">Matched weigh-in dates</th><td>{baseline.relativeDates}</td><td>{recent.relativeDates}</td></tr>}
+              {!metrics.length&&<>{countRow}{volumeRow}</>}
             </tbody>
           </table>
+          {!!metrics.length&&<details className="athlete-disclosure">
+            <summary>Workout totals and sample counts</summary>
+            <table>
+              <thead><tr><th>Measure</th><th>Earlier</th><th>Later</th></tr></thead>
+              <tbody>
+                {countRow}{volumeRow}
+                <tr><th scope="row">Estimated strength dates</th><td>{baseline.dates}</td><td>{recent.dates}</td></tr>
+                {(baseline.relativeDates>0||recent.relativeDates>0)&&<tr><th scope="row">Matched weigh-in dates</th><td>{baseline.relativeDates}</td><td>{recent.relativeDates}</td></tr>}
+              </tbody>
+            </table>
+          </details>}
         </div>}
     </section>
     <section className="athlete-surface athlete-chart" aria-labelledby="replay-history">
