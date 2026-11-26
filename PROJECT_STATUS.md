@@ -1,5 +1,14 @@
 # Project status
 
+## Nutrition Intelligence
+
+- Open the private Nutrition workspace at `http://localhost:3000/app/nutrition`, or use `/app/nutrition` on a deployment of this branch. It includes a dated meal diary, calorie and macro targets, reusable foods and meals, recipes, and intake comparisons with bodyweight and estimated strength.
+- Open Food Facts name search uses Search-a-licious. Brand search uses structured search on the Dutch endpoint. Barcode details use API v3.6 and read as-sold packaging or manufacturer nutrient values. Diary entries keep their own portion and label snapshot. Missing measurements stay unknown. Recent search terms are held for the current Nutrition page visit. A free read connection works without an API key. Set the optional server environment variable `OPEN_FOOD_FACTS_CONTACT` to the operator's contact email for the API user-agent. [Open Food Facts API documentation](https://openfoodfacts.github.io/documentation/docs/Product-Opener/api/)
+- The targets tab documents the Mifflin–St Jeor resting-energy formula, estimates maintenance using one overall activity multiplier, and saves only user-confirmed targets. Weekly intake averages use days that the user marked complete and that have known calorie values. Adaptive maintenance and a secondary USDA provider are deferred. [Mifflin–St Jeor study](https://pubmed.ncbi.nlm.nih.gov/2305711/)
+- ESLint, 22 Vitest tests, the Node 22 production build with TypeScript, and 10 desktop and mobile Chromium tests passed. Embedded PostgreSQL verified owner isolation, anonymous denial, MFA enforcement, and diary updates, moves, duplication, deletion, and label snapshots.
+- Inspected signed-in desktop and mobile Chromium in dark and light themes against a disposable Supabase API fixture. Verified logging, portion conversion, edits, moves, duplication, deletion, reload persistence, saving a meal, and building and logging a recipe serving. A simulated camera decoded EAN-13 barcode 3017620422003 and retrieved its live Nutella label. Live name search returned products in both browser layouts, and the Dutch structured brand endpoint returned genuine products. Hosted sign-in, hosted persistence and isolation, and a physical phone camera remain unverified.
+- The hosted CLI could not list migrations on this network because direct access requires IPv6. Apply `supabase/migrations/202611260001_nutrition.sql` in Supabase SQL Editor after the existing core, MFA, and sync migrations. Paste the complete file, click Run, verify success, and reload Nutrition. The migration creates four owner-scoped tables and reuses the existing MFA policy. [Supabase SQL Editor](https://supabase.com/dashboard/project/clcrkpuajztuvyqrhnvu/sql/new)
+
 ## Premium upgrade
 
 The working baseline is preserved on main at a80a11f. Upgrade work is on feature/premium-fitness-intelligence.
@@ -8,7 +17,7 @@ The working baseline is preserved on main at a80a11f. Upgrade work is on feature
 - Local lint, TypeScript, 16 Vitest tests, the Node.js 22 production build and six Chromium setup and calendar checks across desktop and mobile passed. Inspected the dark setup dashboard on desktop and mobile. Hosted reconciliation, authenticated visual checks and live sync remain pending. The hosted CLI could not inspect migration history because the direct database connection requires IPv6.
 
 - Milestone B is in progress. The calendar has selectable month, week and year views, local-date navigation, a session agenda and workout links. Exercise pages add a detail scale, original session links and rep-count records with prior bests. Workout Replay displays recorded set order, loads, reps, RPE, muscle mapping and records. The dashboard switches between six training and bodyweight metrics.
-- Remaining product work includes deeper muscle and exercise analytics, equivalent-period chart comparisons, workout comparisons, nutrition and its migrations, Performance Lab, Body Evolution integration and Daily Briefing.
+- Remaining product work includes deeper muscle and exercise analytics, equivalent-period chart comparisons, workout comparisons, Performance Lab, Body Evolution integration and Daily Briefing.
 
 ## Milestone 1 verification update
 

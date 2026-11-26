@@ -1,4 +1,97 @@
 *{box-sizing:border-box}
+.nutrition{display:grid;gap:14px;min-width:0}
+.nutrition button:disabled{opacity:.52;cursor:default}
+.nutrition .quiet,.nutrition .button{min-height:38px}
+.nut-heading,.nut-between,.nut-controls,.nut-meal-title{display:flex;align-items:center;gap:9px}
+.nut-heading,.nut-between{justify-content:space-between}
+.nut-heading{padding:4px 0 8px}
+.nut-heading h1{margin-bottom:5px}
+.nut-heading>.button{flex-shrink:0}
+.nut-controls,.nut-toolbar{flex-wrap:wrap}
+.nut-toolbar{gap:10px}
+.nut-tabs{display:flex;gap:3px;flex-wrap:wrap;padding:3px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+.nut-tabs .quiet{border-color:transparent;background:transparent;color:var(--muted);padding-inline:11px}
+.nut-tabs .quiet[aria-pressed=true]{background:var(--raised);color:var(--accent);border-color:var(--line)}
+.nut-date{flex-wrap:nowrap}
+.nutrition input:not([type=range],[type=checkbox]),.nutrition select{min-width:0;max-width:100%;min-height:38px;color:var(--text);background:var(--raised);border:1px solid var(--line);padding:6px 9px;border-radius:7px}
+.nut-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
+.nut-overview{align-items:stretch}
+.nut-panel{padding:15px;display:grid;gap:11px;min-width:0;align-content:start}
+.nut-overview .nut-energy{grid-template-columns:minmax(105px,150px) minmax(0,1fr);align-items:center;align-content:center;gap:clamp(10px,3vw,27px);
+  background:radial-gradient(ellipse at 18% 52%,color-mix(in srgb,var(--accent) 8%,transparent),transparent 70%),var(--panel)}
+.nut-ring{aspect-ratio:1;position:relative;display:grid;place-items:center}
+.nut-ring svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.nut-ring circle{fill:none;stroke-width:8}
+.nut-ring-track{stroke:var(--line)}
+.nut-ring-progress{stroke:var(--accent);stroke-linecap:round;transition:stroke-dasharray .6s ease;animation:nut-ring-in .7s ease-out}
+@keyframes nut-ring-in{from{stroke-dasharray:0 100}}
+.nut-ring>div,.nut-energy-detail{display:grid;gap:3px}
+.nut-ring>div{text-align:center}
+.nut-ring strong{font-size:clamp(1.3rem,3vw,2.1rem);line-height:1;letter-spacing:-.07em;font-variant-numeric:tabular-nums}
+.nut-ring small,.nut-caption,.nut-check{font-size:.8rem}
+.nut-energy-detail button,.nut-form>button,.nut-panel>button{justify-self:start}
+.nut-energy-detail p{font-size:.93rem}
+.nut-macros{gap:9px}
+.nut-macro{display:grid;gap:3px;font-size:.84rem}
+.nut-macro progress,.nut-distribution progress{appearance:none;width:100%;height:7px;border:0;border-radius:20px;background:var(--raised);overflow:hidden}
+.nutrition [data-macro=protein]{--nut-progress:var(--accent)}
+.nutrition [data-macro=carbs]{--nut-progress:var(--chart-average)}
+.nutrition [data-macro=fat]{--nut-progress:var(--chart-record)}
+.nutrition progress::-webkit-progress-bar{background:var(--raised)}
+.nutrition progress::-webkit-progress-value{background:var(--nut-progress);border-radius:20px}
+.nutrition progress::-moz-progress-bar{background:var(--nut-progress);border-radius:20px}
+.nut-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.nut-check{display:flex;align-items:center;gap:6px;color:var(--muted)}
+.nutrition input[type=checkbox],.nutrition input[type=range]{accent-color:var(--accent)}
+.nut-meal-title svg{color:var(--accent);flex-shrink:0}
+.nut-meal-title small{padding-left:3px;white-space:nowrap}
+.nut-entry{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:6px 10px;padding:9px 0;border-top:1px solid var(--line);font-size:.9rem}
+.nut-entry>div:first-child{display:grid;overflow-wrap:anywhere}
+.nut-entry>.nut-controls{grid-column:1/-1}
+.nut-entry .quiet,.nut-entry .button{font-size:.76rem;min-height:34px;padding:4px 8px}
+.nut-empty{padding:11px 0;color:var(--muted);font-size:.87rem}
+.nut-form,.nut-field{display:grid;gap:8px;min-width:0}
+.nut-field{gap:3px;font-size:.83rem;color:var(--muted)}
+.nut-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.nut-search{display:flex;align-items:center;flex-wrap:wrap;gap:7px}
+.nut-search-input{flex:1 1 165px}
+.nut-search-input input{width:100%}
+.nut-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:7px}
+.nut-result.quiet{justify-content:flex-start;min-height:56px;text-align:left;gap:8px}
+.nut-result img{width:38px;height:38px;object-fit:contain;border-radius:5px;background:#fff}
+.nut-result span:nth-child(2){display:grid;flex:1;min-width:0;overflow-wrap:anywhere}
+.nut-result-energy{white-space:nowrap;color:var(--accent);font-size:.73rem}
+.nut-link{text-decoration:underline;text-underline-offset:3px}
+.nut-scanner video{display:block;width:min(100%,360px);border-radius:8px;margin:8px 0}
+.nut-values{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0}
+.nut-values div{padding:6px 8px;border-radius:6px;background:var(--raised);overflow-wrap:anywhere}
+.nut-values dt{font-size:.75rem;color:var(--muted)}
+.nut-values dd{margin:0;font-size:.9rem;font-weight:600}
+.nut-daily-values summary{cursor:pointer;font-size:.87rem}
+.nut-daily-values[open] .nut-values{margin-top:9px}
+.nut-estimate{padding:10px;border:1px solid var(--line);border-radius:8px;font-size:.85rem;display:grid;gap:5px}
+.nut-estimate button{justify-self:start}
+.nut-plot{min-width:0;border:1px solid var(--line);border-radius:8px;padding:10px}
+.nut-plot svg{display:block;width:100%;max-height:290px}
+.nut-plot svg text{fill:var(--muted);font:12px system-ui}
+.nut-legend,.nut-tooltip,.nut-scrubber{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;font-size:.78rem;color:var(--muted)}
+.nut-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.nut-tooltip{min-height:28px}
+.nut-scrubber input{flex:1;min-width:80px}
+.nut-distribution{display:grid;gap:8px;font-size:.81rem}
+.nut-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media(max-width:820px){.workspace .mobile-nav{grid-template-columns:repeat(6,minmax(0,1fr))}}
+@media(max-width:640px){
+  .nut-grid{grid-template-columns:minmax(0,1fr)}
+  .nut-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .nut-stats .stat:last-child{grid-column:1/-1}
+  .nut-tabs .quiet{padding-inline:8px;font-size:.77rem}
+  .nut-overview .nut-energy{grid-template-columns:115px minmax(0,1fr)}
+  .nutrition .nut-date button,.nutrition .nut-heading button,.nutrition .nut-search button{min-height:44px}
+  .workspace .mobile-nav a,.workspace .mobile-nav button{font-size:.61rem}
+}
+@media(max-width:370px){.nut-values{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.nut-ring-progress{animation:none;transition:none}}
 :root,.workspace{--bg:#0b0d10;--sidebar:#0d1013;--panel:#11151a;--raised:#191e24;--line:#262d33;--text:#f2f4f1;--muted:#a3abb4;--accent:#c6f66b;--accent-ink:#172109;color-scheme:dark}
 html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 Inter,Geist,'Segoe UI',system-ui,sans-serif}
 a{color:inherit;text-decoration:none}button,input,select{font:inherit}button{cursor:pointer}h1,h2,h3,p{margin:0}button,a,input,select,summary{outline-offset:4px} :focus-visible{outline:2px solid var(--accent)}

@@ -8,18 +8,18 @@ function readError(table:string,code:string,message:string):never {
   throw new Error(message);
 }
 
-async function read<T>(client:SupabaseClient, table:string, fields:string, order:string, tie?:string) {
+export async function read<T>(client:SupabaseClient, table:string, fields:string, order:string, tie?:string) {
   const result:T[]=[];
   for(let start=0;start<20000;start+=200){
     let query=client.from(table).select(fields).order(order,{ascending:false});
     if(tie) query=query.order(tie);
     const {data,error}=await query.range(start,start+199);
-    if(error) readError(table,error.code,'Unable to load private training data.');
+    if(error) readError(table,error.code,'Unable to load private workspace data.');
     if(!data) break;
     result.push(...data as T[]);
     if(data.length<200) return result;
   }
-  throw new Error('The training history exceeds the current report limit.');
+  throw new Error('The workspace history exceeds the current report limit.');
 }
 export async function dataFor(client:SupabaseClient){
   const [workouts,templates,measurements,goals,prefs,sync]=await Promise.all([

@@ -16,7 +16,7 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
       create function auth.uid() returns uuid language sql stable as
         'select (auth.jwt()->>''sub'')::uuid';
     `);
-    for(const path of ['migrations/202611250001_core.sql','migrations/202611250002_mfa.sql','migrations/202611250003_sync_lifecycle.sql','tests/isolation.sql']){
+    for(const path of ['migrations/202611250001_core.sql','migrations/202611250002_mfa.sql','migrations/202611250003_sync_lifecycle.sql','migrations/202611260001_nutrition.sql','tests/isolation.sql','tests/nutrition_isolation.sql']){
       await sql.exec(await readFile(new URL('../supabase/'+path,import.meta.url),'utf8'));
     }
     const [tableCheck,policies,constraints,indexes,rpcCheck]=await sql.exec(await readFile(new URL('../supabase/tests/schema_check.sql',import.meta.url),'utf8'));

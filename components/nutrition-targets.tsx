@@ -1,0 +1,62 @@
+'use client';
+
+import {useState,type FormEvent} from 'react';
+import {energyEstimate,labels,targetSchema,type Target} from '../lib/nutrition';
+import {amount} from './nutrition-charts';
+
+type Targets=Omit<Target,'day'>;
+const keys=['kcal','protein','carbs','fat'] as const;
+const activityLevels=[
+  [1.2,'Mostly seated'],[1.375,'Lightly active'],[1.55,'Moderately active'],[1.725,'Very active'],[1.9,'Highly active'],
+] as const;
+
+export function NutritionTargets({day,target,weight,busy,onSave}:{day:string;target?:Target;weight?:number;busy:boolean;onSave:(targets:Targets)=>void}){
+  const [estimate,setEstimate]=useState<{resting:number;maintenance:number;goal:number}>();
+  const [calories,setCalories]=useState(String(target?.kcal??''));
+  const [error,setError]=useState('');
+  function calculate(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    const data=new FormData(event.currentTarget);
+    const value=(key:string)=>Number(data.get(key));
+    const result=energyEstimate(value('age'),value('height'),value('weight'),value('profile'),value('activity'));
+    setEstimate({...result,goal:Math.round(result.maintenance+value('goal'))});
+  }
+  function save(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    const data=new FormData(event.currentTarget);
+    const parsed=targetSchema.safeParse(Object.fromEntries(keys.map(key=>[key,Number(data.get(key))])));
+    if(parsed.success){setError('');onSave(parsed.data);}
+    else setError('Enter a positive calorie target and valid macro targets.');
+  }
+  return <div className="nut-grid">
+    <form className="panel nut-panel nut-form" onSubmit={save}>
+      <h2>Daily targets</h2><p className="muted nut-caption">Targets take effect on {day} and carry forward until the next change.</p>
+      <div className="nut-form-grid">
+        <label className="nut-field">Calories (kcal)<input type="number" required name="kcal" min="1" max="20000" step="1" value={calories} onChange={event=>setCalories(event.target.value)}/></label>
+        {keys.slice(1).map(key=><label className="nut-field" key={key}>{labels[key]} (g)<input type="number" required min="0" max="2000" step="any" name={key} defaultValue={target?.[key]}/></label>)}
+      </div>
+      {error&&<p role="alert">{error}</p>}
+      <button className="button" disabled={busy}>Save targets</button>
+    </form>
+    <form className="panel nut-panel nut-form" onSubmit={calculate}>
+      <h2>Energy needs estimate</h2>
+      <p className="muted nut-caption">For adults. Mifflin–St Jeor estimates resting energy as 10 × kg + 6.25 × cm − 5 × age + profile constant. Maintenance multiplies this by your overall activity, including exercise.</p>
+      <div className="nut-form-grid">
+        <label className="nut-field">Age<input name="age" type="number" required min="18" max="120"/></label>
+        <label className="nut-field">Height (cm)<input name="height" type="number" step="any" required min="100" max="260"/></label>
+        <label className="nut-field">Bodyweight (kg)<input name="weight" type="number" step="any" required min="25" max="400" defaultValue={weight}/></label>
+        <label className="nut-field">Equation profile<select name="profile" required defaultValue=""><option value="" disabled>Select profile</option><option value="5">Male (+5)</option><option value="-161">Female (−161)</option></select></label>
+        <label className="nut-field">Overall activity<select name="activity" defaultValue="1.375">{activityLevels.map(([factor,label])=><option key={factor} value={factor}>{label} (×{factor})</option>)}</select></label>
+        <label className="nut-field">Goal<select name="goal"><option value="0">Maintain weight</option><option value="200">Gradual muscle gain (+200 kcal)</option><option value="-250">Gradual weight loss (−250 kcal)</option></select></label>
+      </div>
+      <button className="quiet">Calculate estimate</button>
+      {estimate&&<div className="nut-estimate" role="status">
+        <p>Estimated resting energy <strong>{amount(Math.round(estimate.resting))} kcal/day</strong></p>
+        <p>Estimated maintenance <strong>{amount(Math.round(estimate.maintenance))} kcal/day</strong></p>
+        <p>Estimated goal intake <strong>{amount(estimate.goal)} kcal/day</strong></p>
+        <button className="quiet" type="button" disabled={estimate.goal<=0} onClick={()=>setCalories(String(estimate.goal))}>Copy to calorie target</button>
+      </div>}
+      <small><a className="nut-link" href="https://pubmed.ncbi.nlm.nih.gov/2305711/">Mifflin–St Jeor equation reference</a></small>
+    </form>
+  </div>;
+}
