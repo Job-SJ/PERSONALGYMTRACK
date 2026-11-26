@@ -6,7 +6,7 @@ import {formatDate,formatNumber,type Locale} from '../lib/format';
 
 export type TrendPoint = {label:string;value:number;at?:string;incomplete?:boolean;href?:string;record?:boolean};
 
-export function Trend({points:observations,unit,locale='en-GB',detailScale=false}:{points:TrendPoint[];unit:string;locale?:Locale;detailScale?:boolean}){
+export function Trend({points:observations,unit,locale='en-GB',detailScale=false,observedOnly=false}:{points:TrendPoint[];unit:string;locale?:Locale;detailScale?:boolean;observedOnly?:boolean}){
   const id=useId();
   const [active,setActive]=useState<number|null>(null);
   const [detail,setDetail]=useState(detailScale);
@@ -53,20 +53,20 @@ export function Trend({points:observations,unit,locale='en-GB',detailScale=false
     {observations.length>=3&&<div className="chart-controls chart-options">
       <button className="quiet" type="button" disabled={points.length<4} onClick={()=>{setZoom(zoom+Math.floor(points.length/2));setActive(null);}}>Zoom in</button>
       {zoom>0&&<button className="quiet" type="button" onClick={()=>{setZoom(0);setActive(null);}}>Reset zoom</button>}
-      <label>Moving average <select value={average} onChange={event=>setAverage(Number(event.target.value))}><option value={0}>Off</option>{[3,5,10].filter(n=>n<=observations.length).map(n=><option key={n} value={n}>{n} observations</option>)}</select></label>
+      {!observedOnly&&<label>Moving average <select value={average} onChange={event=>setAverage(Number(event.target.value))}><option value={0}>Off</option>{[3,5,10].filter(n=>n<=observations.length).map(n=><option key={n} value={n}>{n} observations</option>)}</select></label>}
     </div>}
     {detailScale&&points.length>0&&<div className="chart-controls"><button className="quiet" type="button" onClick={()=>setDetail(!detail)}>{detail?'Use zero-based scale':'Use detail scale'}</button><small>{detail?'Detail scale':'Zero-based scale'}</small></div>}<svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={points.length?`Trend measured in ${unit}`:'No data to plot'} tabIndex={points.length?0:undefined} onBlur={()=>setActive(null)} onKeyDown={inspectWithKeyboard} onPointerLeave={()=>setActive(null)} onPointerMove={inspect} onPointerDown={inspect}>
     <defs><linearGradient id={id} x1="0%" y1="0%" x2="0%" y2="100%"><stop stopColor="var(--accent)" stopOpacity=".25"/><stop offset="1" stopColor="var(--accent)" stopOpacity=".015"/></linearGradient></defs>
     {[0,1,2,3,4].map(i=>{const y=18+i*(bottom-18)/4;return <g key={i}><line x1={left} x2={width-25} y1={y} y2={y} stroke="var(--line)" strokeDasharray="3 4"/><text x={left-10} y={y+4} textAnchor="end">{points.length?Intl.NumberFormat(locale,{notation:'compact',maximumFractionDigits:1}).format(lowest+(highest-lowest)*(4-i)/4):'—'}</text></g>;})}
-    {coords.length>1&&!detail&&<path d={line+` L${coords.at(-1)![0]} ${bottom} L${left} ${bottom}Z`} fill={`url(#${id})`}/>}
-    {coords.length>0&&<path d={line} fill="none" stroke="var(--accent)" strokeWidth="2.5"/>}
+    {coords.length>1&&!detail&&!observedOnly&&<path d={line+` L${coords.at(-1)![0]} ${bottom} L${left} ${bottom}Z`} fill={`url(#${id})`}/>}
+    {coords.length>0&&!observedOnly&&<path d={line} fill="none" stroke="var(--accent)" strokeWidth="2.5"/>}
     {averages.length>1&&<path d={averageLine} fill="none" stroke="var(--chart-average)" strokeWidth="2" strokeDasharray="5 4"/>}
     {plotted.map(([x,y],i)=><g key={i}>{(i===0||i===coords.length-1||i===Math.floor(coords.length/2))&&<text x={x} y={211} textAnchor={i===0?'start':i===coords.length-1?'end':'middle'}>{points[i].label}</text>}
-    {(coords.length===1||i===active||points[i].incomplete||points[i].record)&&<circle cx={x} cy={y} r={points[i].record?5:4} className={points[i].record?'record-marker':undefined} fill={points[i].incomplete?'var(--panel)':'var(--accent)'} stroke="var(--accent)" strokeWidth="2"/>}</g>)}
+    {(observedOnly||coords.length===1||i===active||points[i].incomplete||points[i].record)&&<circle cx={x} cy={y} r={points[i].record?5:i===active?4:observedOnly?2:4} className={points[i].record?'record-marker':undefined} fill={points[i].incomplete?'var(--panel)':'var(--accent)'} stroke="var(--accent)" strokeWidth="2"/>}</g>)}
     {marker&&<line x1={marker[0]} x2={marker[0]} y1={16} y2={bottom} stroke="var(--muted)" strokeDasharray="4 4" pointerEvents="none"/>}
-  </svg>{!points.length&&<div className="plot-empty">No observations in this range</div>}{active!==null&&points[active]&&<output className="plot-tooltip" aria-live="polite">{points[active].at?formatDate(points[active].at!,locale,{dateStyle:'medium'}):points[active].label} · {formatNumber(points[active].value,2,locale)} {unit}{points[active].record?' / Personal record':''}{points[active].incomplete?' / Partial week':''}</output>}
+  </svg>{!points.length&&<div className="plot-empty">No observations in this range</div>}{active!==null&&points[active]&&<output className="plot-tooltip" aria-live="polite">{points[active].at?formatDate(points[active].at!,locale,{dateStyle:'medium'}):points[active].label} · {formatNumber(points[active].value,2,locale)} {unit}{points[active].record?' / Personal record':''}{points[active].incomplete?(observedOnly?' / Partial period':' / Partial week'):''}</output>}
   {average>0&&<p className="legend average-label">{average}-observation moving average</p>}
   {points.some(p=>p.record)&&<p className="legend">Gold markers indicate personal records</p>}
-  {points.some(p=>p.incomplete)&&<p className="legend">Open markers indicate partial weeks</p>}
+  {points.some(p=>p.incomplete)&&<p className="legend">Open markers indicate {observedOnly?'partial periods':'partial weeks'}</p>}
   {points.length>0&&<details className="chart-data"><summary>View chart data</summary><table><thead><tr><th>Date</th><th>{unit}</th></tr></thead><tbody>{points.map((p,i)=><tr key={i}><td>{p.href?<Link href={p.href}>{p.at?formatDate(p.at,locale,{dateStyle:'medium'}):p.label}</Link>:p.at??p.label}{p.record?' (record)':''}{p.incomplete?' · In progress':''}</td><td>{formatNumber(p.value,2,locale)}</td></tr>)}</tbody></table></details>}</div>;
 }

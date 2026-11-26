@@ -133,7 +133,7 @@ export function dailyIntelligence({workouts,templates,measurements,records,nutri
   const meaningfulAttendance=consistency&&Math.abs(dayDifference)>=Math.max(2,Math.ceil(beforeDays.size*0.2));
   const decimal=(value:number)=>formatNumber(value,1,locale);
   const percent=(value:number)=>new Intl.NumberFormat(locale,{style:'percent',maximumFractionDigits:1,signDisplay:'exceptZero'}).format(value/100);
-  const exerciseLink=(id:string)=>'/app/exercises/'+encodeURIComponent(id)+'?days='+days;
+  const exerciseLink=(id:string)=>'/app/analytics?view=replay&exercise='+encodeURIComponent(id)+'&length='+Math.max(30,days);
   const indicators:Indicator[]=[
     {label:'Strength progression',value:strengthChange==null?'—':!leader?'Mixed':percent(strengthChange),
       detail:!strength.length?'More comparable sessions needed':strength.length===1?strength[0].name+' · estimated 1RM':strength.length+' comparable exercises · estimated 1RM',

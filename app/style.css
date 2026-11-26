@@ -296,3 +296,97 @@ a.row:hover,.rows summary:hover{background:var(--raised)}.sidebar nav a[aria-cur
   .intelligence-footer{flex-wrap:wrap}
   .intelligence-period a{min-height:36px}
 }
+
+.intelligence-footer-meta{display:flex;justify-content:flex-end;align-items:baseline;flex-wrap:wrap;gap:4px 12px}
+.intelligence-footer-meta a,.replay-milestone a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.athlete-nav{display:flex;flex-wrap:wrap;gap:3px 6px;border-bottom:1px solid var(--line)}
+.athlete-nav a{position:relative;padding:7px 9px;color:var(--muted);font-size:.81rem;font-weight:650;border-bottom:2px solid transparent}
+.athlete-nav a:hover,.athlete-nav a[aria-current=page]{color:var(--text)}
+.athlete-nav a[aria-current=page]{border-color:var(--accent)}
+.athlete-heading .eyebrow{margin-bottom:4px}
+.athlete-heading h1{margin-bottom:0}
+.athlete-surface{min-width:0;padding:13px 15px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+.athlete-empty,.athlete-placeholder{padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);font-size:.86rem}
+.athlete-placeholder{min-height:34px;align-content:center}
+.athlete-placeholder[data-experience=passport],.athlete-placeholder[data-experience=fingerprint]{min-height:335px}
+.athlete-controls{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:end}
+.athlete-controls label,.passport-name-input{display:grid;gap:3px;color:var(--muted);font-size:.77rem;min-width:0}
+.athlete-controls .button,.athlete-controls input,.athlete-controls select{min-height:38px}
+.athlete-controls :is(input,select){width:100%}
+.replay-compare>p,.athlete-note{font-size:.83rem;margin-top:4px}
+.replay-compare .detail{padding:3px 0 0}
+.replay-compare table th,.replay-compare table td{padding:5px 7px;white-space:normal}
+.replay-compare th small{display:block;font-weight:400;font-size:.68rem}
+.athlete-chart>header{display:flex;align-items:baseline;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;margin-bottom:8px}
+.athlete-chart .trend svg{max-height:260px}
+.athlete-chart .trend>.chart-controls{display:inline-flex;margin-inline-end:8px}
+.athlete-disclosure{font-size:.82rem;border-top:1px solid var(--line);padding-top:6px;margin-top:8px}
+.athlete-disclosure summary{cursor:pointer;font-weight:650;width:fit-content}
+.athlete-disclosure summary small{margin-inline-start:5px;font-weight:400}
+.athlete-disclosure>p{margin-top:5px;color:var(--muted);max-width:92ch}
+.replay-timeline{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;margin-top:6px;color:var(--muted)}
+.replay-timeline input{width:100%;accent-color:var(--accent);padding:0}
+.replay-milestone,.replay-milestone span{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px}
+.replay-milestone{justify-content:space-between}
+
+.passport-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:18px;max-width:900px;align-items:start}
+.passport-card{--pass-ink:#18242d;--pass-secondary:#4d616d;--pass-accent:#38651d;--pass-line:#d3dde4;background:#f8fafb;color:var(--pass-ink);min-width:0;border:1px solid var(--pass-line);border-radius:10px;padding:clamp(18px,3.6vw,29px);overflow-wrap:anywhere}
+.passport-card[data-dark=true]{--pass-ink:#f1f5f8;--pass-secondary:#a5b3bf;--pass-accent:#b9ed7f;--pass-line:#2a3541;background:#141a21}
+.passport-wordmark{font-size:.71rem;font-weight:780;letter-spacing:.12em;color:var(--pass-accent);margin-bottom:8px}
+.passport-wordmark::before{content:"";display:block;width:34px;height:3px;background:var(--pass-accent);margin-bottom:8px}
+.passport-card h2{font-size:1rem}
+.passport-name{font-size:clamp(1.25rem,3vw,1.9rem);font-weight:750;line-height:1.16;margin:3px 0 10px;letter-spacing:-.04em}
+.passport-card dl{margin:0;border-top:1px solid var(--pass-line)}
+.passport-card dl div{padding:6px 0;border-bottom:1px solid var(--pass-line)}
+.passport-card dt{font-size:.76rem;color:var(--pass-secondary)}
+.passport-card dd{margin:0;font-weight:720;font-size:1.14rem}
+.passport-signature{margin-top:10px;font-size:.79rem;font-weight:620}
+.passport-options{display:grid;min-width:0;gap:8px}
+.passport-options p{font-size:.84rem}
+.passport-options>button{justify-self:start}
+.passport-fields{min-width:0;margin:0;padding:5px 9px 7px;border:1px solid var(--line);border-radius:7px;display:grid}
+.passport-fields legend{font-size:.81rem;color:var(--muted)}
+.passport-fields label,.passport-option{display:flex;align-items:center;gap:7px;min-height:29px;font-size:.81rem;overflow-wrap:anywhere}
+.passport-options input[type=checkbox]{accent-color:var(--accent);flex:none}
+.passport-review{border-top:1px solid var(--line);padding-top:8px}
+.passport-review .inline{margin-bottom:0}
+
+.fingerprint-context{display:flex;justify-content:space-between;align-items:center;gap:7px;flex-wrap:wrap;font-size:.82rem}
+.fingerprint-heading p{color:var(--muted);font-size:.84rem;max-width:76ch}
+.fingerprint-layout{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);align-items:center;gap:12px;margin-top:6px}
+.fingerprint-visual{min-width:0;text-align:center}
+.fingerprint-visual svg{display:block;width:100%;max-width:330px;margin:auto;aspect-ratio:1;overflow:visible}
+.fingerprint-grid{fill:none;stroke:var(--line)}
+.fingerprint-current{fill:color-mix(in srgb,var(--accent) 10%,transparent);stroke:var(--accent);stroke-width:1.8}
+.fingerprint-current circle{fill:var(--accent);stroke:var(--panel)}
+.fingerprint-prior{fill:none;stroke:var(--chart-average);stroke-width:1.4;stroke-dasharray:3 3;opacity:.8}
+.fingerprint-prior circle{fill:var(--panel);stroke-dasharray:none}
+.fingerprint-active-point{stroke:var(--text)!important;stroke-width:1.6}
+.fingerprint-hit{cursor:pointer;fill:transparent}
+.fingerprint-legend{display:flex;justify-content:center;flex-wrap:wrap;gap:5px 11px;color:var(--muted);font-size:.72rem;margin-top:3px}
+.fingerprint-legend span::before{content:"";display:inline-block;width:12px;margin-inline-end:4px;border-top:2px solid var(--accent);vertical-align:.23em}
+.fingerprint-legend span+span::before{border-color:var(--chart-average);border-top-style:dashed}
+.fingerprint-axis-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+.fingerprint-axis-list button{display:flex;gap:8px;align-items:center;justify-content:space-between;text-align:left;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--text);padding:6px 8px;min-height:40px;font-size:.76rem}
+.fingerprint-axis-list button[aria-pressed=true],.fingerprint-axis-list button:hover{background:var(--raised);border-color:var(--accent)}
+.fingerprint-axis-list strong{font-variant-numeric:tabular-nums;color:var(--accent)}
+.fingerprint-method{margin-top:8px;min-height:74px}
+.fingerprint-method h3{font-size:.85rem}
+.fingerprint-method p{font-size:.8rem;color:var(--muted)}
+@media(max-width:900px){
+  .athlete-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .athlete-controls button{justify-self:start}
+}
+@media(max-width:580px){
+  .athlete-nav{gap:1px}
+  .athlete-nav a{font-size:.72rem;padding:8px 5px}
+  .athlete-surface{padding:10px}
+  .passport-layout,.fingerprint-layout{grid-template-columns:minmax(0,1fr);gap:10px}
+  .athlete-placeholder[data-experience=passport]{min-height:590px}
+  .athlete-placeholder[data-experience=fingerprint]{min-height:440px}
+  .passport-fields label,.passport-option{min-height:37px}
+  .fingerprint-visual svg{max-width:240px}
+  .fingerprint-axis-list button{min-height:44px}
+  .replay-compare th small{font-size:.63rem}
+  .intelligence-footer-meta{justify-content:flex-start}
+}
