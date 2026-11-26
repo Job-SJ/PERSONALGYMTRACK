@@ -1,5 +1,7 @@
+import {comparablePeriod} from '../lib/periods';
+import {formatDate,formatUnit} from '../lib/format';
 import {describe,expect,it,vi} from 'vitest';
-import {bestRecords,dayKey,estimate,muscleTotals,relativeStrength,streaks,trainingFrequencyComparison,volume} from '../lib/analytics';
+import {bestRecords,dayKey,estimate,muscleSessions,muscleTotals,relativeStrength,streaks,trainingFrequencyComparison,volume} from '../lib/analytics';
 import {normalize,workoutSchema,type Template} from '../lib/model';
 import {parseCsv} from '../lib/csv';
 import {hevy} from '../lib/hevy';
@@ -28,6 +30,14 @@ describe('analytics',()=>{
     expect(volume(set,{...template,type:'assisted_bodyweight_reps'})).toBeNull();
     expect(volume({...set,weight_kg:null},template)).toBeNull();
   });
+  it('groups muscle sessions by mapping without counting warm-ups or duplicate secondary tags',()=>{
+    const chest=muscleSessions([one],templates,'chest');
+    const triceps=muscleSessions([one],templates,'triceps');
+    expect(chest[0].exercises[0]).toMatchObject({direct:true,sets:[{weight_kg:60}]});
+    expect(triceps[0].exercises).toHaveLength(1);
+    expect(triceps[0].exercises[0].direct).toBe(false);
+    expect(muscleSessions([one],templates,'back')).toEqual([]);
+  });
   it('counts direct and secondary sets once per region',()=>{
     const totals=muscleTotals([one,two],templates);
     expect(totals.chest).toMatchObject({sessions:2,direct:2,secondary:0});
@@ -35,6 +45,7 @@ describe('analytics',()=>{
   });
   it('tracks records in chronological order even with unsorted workouts',()=>{
     expect(bestRecords([two,one],templates).filter(r=>r.metric==='Max weight').map(r=>r.value)).toEqual([65,60]);
+    expect(bestRecords([two,one],templates).find(r=>r.metric==='5-rep weight')).toMatchObject({value:65,previous:60,workout:'b',exercisePosition:0,setPosition:1});
   });
   it('buckets dates in Amsterdam across daylight-saving time',()=>{
     expect(dayKey(two.started_at)).toBe('2025-03-31');
@@ -71,5 +82,20 @@ describe('Hevy data boundaries',()=>{
     expect(transport.mock.calls.map(([url])=>new URL(String(url)).searchParams.get('page'))).toEqual(['1','1','2']);
     expect(sleep).toHaveBeenCalledWith(1000);
     expect(transport.mock.calls[0][1]?.redirect).toBe('error');
+  });
+});
+
+describe('presentation boundaries',()=>{
+  it('compares matching completed days and caps a comparison at the shorter prior month',()=>{
+    expect(comparablePeriod('2026-11-25','week')).toMatchObject({
+      elapsed:2,start:'2026-11-23',end:'2026-11-25',previous:'2026-11-16',previousEnd:'2026-11-18',
+    });
+    expect(comparablePeriod('2025-03-31','month')).toMatchObject({elapsed:28,end:'2025-03-29',previousEnd:'2025-03-01'});
+    expect(comparablePeriod('2026-11-23','week').elapsed).toBe(0);
+  });
+  it('uses Amsterdam dates for timestamps and preserves date-only measurements',()=>{
+    expect(formatDate('2025-03-30T22:30:00Z')).toBe('31 Mar');
+    expect(formatDate('2025-03-30')).toBe('30 Mar');
+    expect(formatUnit(31395.5,'kg',1,'nl-NL')).toBe('31.395,5 kg');
   });
 });
