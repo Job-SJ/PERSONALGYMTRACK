@@ -12,7 +12,9 @@ test('setup dashboard and keyboard search',async({page},info)=>{
   await page.keyboard.press('Control+k');
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('textbox',{name:'Find a page'}).fill('muscle');
-  await page.getByRole('dialog').getByRole('link',{name:'Muscle analytics'}).click();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('dialog').getByRole('link',{name:'Muscle analytics'})).toBeFocused();
+  await page.keyboard.press('Enter');
   await expect(page.getByRole('heading',{name:'Full body overview'})).toBeVisible();
   await expect(page.getByRole('navigation').getByRole('link',{name:'Dashboard'}).first()).not.toHaveAttribute('aria-current','page');
   await expect(page.getByRole('navigation').getByRole('link',{name:'Muscle analytics'}).first()).toHaveAttribute('aria-current','page');
@@ -28,6 +30,17 @@ test('unconfigured private workspace renders no account data',async({page})=>{
   await page.goto('/app/workouts');
   await expect(page).toHaveURL('/');
   await expect(page.getByRole('heading',{name:'Dashboard'})).toBeVisible();
+});
+
+test('unauthenticated export redirects with private response headers',async({request})=>{
+  const response=await request.get('/app/export',{maxRedirects:0});
+  expect(response.status()).toBe(307);
+  expect(response.headers().location).toBe('/');
+  expect(response.headers()['cache-control']).toContain('no-store');
+  expect(response.headers()['x-frame-options']).toBe('DENY');
+  expect(response.headers()['referrer-policy']).toBe('no-referrer');
+  expect(response.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
+  expect(response.headers()['content-disposition']).toBeUndefined();
 });
 
 test('calendar switches periods, views and weekday order without page overflow',async({page},info)=>{

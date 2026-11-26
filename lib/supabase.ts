@@ -2,7 +2,7 @@ import 'server-only';
 import {createServerClient} from '@supabase/ssr';
 import {cookies} from 'next/headers';
 import {redirect} from 'next/navigation';
-import {configuredSupabase} from './connection-env';
+import {authCookieOptions,configuredSupabase} from './connection-env';
 
 export const config=()=>configuredSupabase();
 export const configured=()=>Boolean(config());
@@ -11,7 +11,7 @@ export async function db() {
   if (!connection) throw new Error('The Supabase connection configuration is invalid.');
   const jar=await cookies();
   return createServerClient(connection.url,connection.key,{
-    cookieOptions:{httpOnly:true},
+    cookieOptions:authCookieOptions(),
     cookies:{getAll:()=>jar.getAll(),setAll:values=>{try {for(const {name,value,options} of values) jar.set(name,value,options);} catch { /* Proxy handles refresh for Server Components. */ }}},
   });
 }

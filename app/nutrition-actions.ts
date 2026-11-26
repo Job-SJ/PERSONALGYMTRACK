@@ -67,7 +67,7 @@ export async function searchFoods(mode:SearchMode,input:string){
     const contact=process.env.OPEN_FOOD_FACTS_CONTACT||'https://github.com/Job-SJ/PERSONALGYMTRACK';
     const response=await fetch(foodSearchUrl(mode,search.data.input),{
       headers:{'User-Agent':`PersonalGymTrack/1.0 (${contact})`,Accept:'application/json'},
-      next:{revalidate:3600},signal:AbortSignal.timeout(10000),
+      next:{revalidate:3600},redirect:'error',signal:AbortSignal.timeout(10000),
     });
     if(mode==='barcode'&&response.status===404) return {foods:[]};
     if(!response.ok) return {error:'Open Food Facts is temporarily unavailable. Try again shortly or use a custom food.'};
