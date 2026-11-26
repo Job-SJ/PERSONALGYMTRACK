@@ -33,10 +33,10 @@ You can open the interface without an account in **setup mode**. Connect your ow
 
 ## Run locally
 
-You need **Node.js 22.x**, npm, and Git access to this private repository. Open the repository's **Code** menu and copy its clone URL.
+You need **Node.js 22.x**, npm, and Git. The default branch is `main`.
 
 ```sh
-git clone --branch feature/premium-fitness-intelligence "YOUR_REPOSITORY_CLONE_URL" PERSONALGYMTRACK
+git clone https://github.com/Job-SJ/PERSONALGYMTRACK.git
 cd PERSONALGYMTRACK
 npm ci
 npm run dev
@@ -142,7 +142,7 @@ The latest application verification passed lint, type checking, the production b
 
 The repository includes a [Vercel configuration](vercel.json) for Next.js functions in Frankfurt. For a restricted preview:
 
-1. Import the private repository into Vercel, choose the Next.js preset and Node.js 22.x, and enable Deployment Protection before sharing the URL.
+1. Import the repository into Vercel, choose the Next.js preset and Node.js 22.x, and enable Deployment Protection before sharing the URL.
 2. Use a separate Supabase project for preview. Apply its migrations and set the environment variables for the **Preview** environment in Vercel.
 3. Set the preview project's Supabase Auth Site URL and allowlist to the approved HTTPS origin. Verify invitations and recovery, MFA, isolation between two test accounts, and import and sync behavior before using real records.
 
@@ -165,4 +165,10 @@ These are proposed improvements for future work.
 3. Make long Hevy imports resumable and evaluate per-user OAuth.
 4. Extend data export to nutrition and add self-service account deletion.
 
-[Design notes](docs/design-system.md)
+## Contributing and license
+
+See the [contribution guide](CONTRIBUTING.md) for forks, pull requests, and isolated development. Use the [security policy](SECURITY.md) to report vulnerabilities privately.
+
+Copyright © 2026 Job Sjobbema. Original project code and documentation are available under the [MIT License](LICENSE). It permits reuse, modification, and redistribution with the copyright and permission notices preserved. Forks should identify themselves as independent projects. The license grants no endorsement or rights to personal data, project branding, or third-party material. [Third-party notices](THIRD_PARTY_NOTICES.md)
+
+[Design notes](docs/design-system.md) · [Maintainer release checks](docs/releasing.md)

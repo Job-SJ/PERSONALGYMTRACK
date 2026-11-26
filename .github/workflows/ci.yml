@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'release/**']
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install and run Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          scan_dir="$(mktemp -d)"
+          archive="$scan_dir/gitleaks.tar.gz"
+          curl --fail --silent --show-error --location --retry 2 --max-time 60 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$archive"
+          printf '%s  %s\n' 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb "$archive" | sha256sum --check
+          tar -xzf "$archive" -C "$scan_dir" gitleaks
+          printf 'title = "CI secret scan"\n[extend]\nuseDefault = true\n' > "$scan_dir/gitleaks.toml"
+          : > "$scan_dir/.gitleaksignore"
+          "$scan_dir/gitleaks" git . --redact=100 --no-banner \
+            --config "$scan_dir/gitleaks.toml" --gitleaks-ignore-path "$scan_dir/.gitleaksignore" \
+            --ignore-gitleaks-allow --log-opts='--all HEAD --full-history -m --root'
+
+  checks:
+    name: App checks
+    needs: secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

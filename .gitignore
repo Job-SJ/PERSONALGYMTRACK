@@ -1,18 +1,59 @@
+# Dependencies and generated files
 node_modules/
 .next/
 .npm-cache/
-.env*
-!.env.example
 *.tsbuildinfo
 playwright-report/
 test-results/
-Wachtwoord Database/
 /test
-private-exports/
-.vercel/
-/.pgt-checkout/
-/supabase/.temp/
-/supabase/.branches/
+
+# Environment and credentials
+.env*
+!.env.example
+.npmrc
+.netrc
+.dev.vars*
+credentials.json
+credentials.local.json
+secrets.json
+service-account*.json
 *.pem
+*.key
 *.pfx
+*.p12
+*.jks
+.vercel/
+.supabase/
+supabase/.temp/
+supabase/.branches/
+supabase/.env*
+/.pgt-checkout/
+
+# Logs, local databases, and backups
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+*.dump
 *.pgdump
+*.bak
+*.sql.gz
+/*.sql
+/supabase/seed.sql
+
+# Personal data and local captures
+private-data/
+private-exports/
+exports/
+backups/
+Wachtwoord Database/
+/*.csv
+/personalgymtrack*.json
+/workout*.json
+/nutrition*.json
+/bodyweight*.json
