@@ -1,4 +1,14 @@
-# Threat model and release checks
+# Security policy
+
+## Report a vulnerability privately
+
+Use **Security → Advisories → Report a vulnerability** on GitHub when private reporting is enabled. If the button is unavailable, ask the repository maintainer through a private channel for a secure way to share the report. Keep vulnerability details, credentials, and user records out of public issues and pull requests.
+
+Include the affected version or commit, the impacted feature, a description of the issue and its impact, and steps to reproduce it with synthetic data. Share only the minimum evidence needed to triage the issue. We will coordinate disclosure after assessing the report and preparing any fix.
+
+Reports are triaged against the current `main` branch. Test only against systems and accounts you own or are authorized to use.
+
+## Threat model
 
 Fitness history, notes, body measurements and email addresses are private. Threats include unauthenticated access, cross-account access, compromised sessions, key leakage and malformed source data.
 
