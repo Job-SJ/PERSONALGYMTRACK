@@ -46,6 +46,22 @@ test('daily intelligence keeps its period distinct from the dashboard chart rang
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
+test('athlete experiences are discoverable from Daily Intelligence and handle empty data',async({page})=>{
+  await page.goto('/');
+  await page.getByRole('link',{name:'Explore training history'}).click();
+  const nav=page.getByRole('navigation',{name:'Training experiences'});
+  await expect(nav.getByRole('link',{name:'Performance Replay'})).toHaveAttribute('aria-current','page');
+  await expect(page.getByText('Import workouts to explore your recorded training history.')).toBeVisible();
+  await nav.getByRole('link',{name:'Strength Passport'}).click();
+  await expect(page.getByRole('heading',{name:'Your strength. Your story.'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Review PNG export'})).toHaveCount(0);
+  await nav.getByRole('link',{name:'Training Fingerprint'}).click();
+  await expect(page.getByText(/at least four distinct dates/)).toBeVisible();
+  await page.getByRole('navigation',{name:'Fingerprint period'}).getByRole('link',{name:'56 days'}).click();
+  await expect(page.getByRole('link',{name:'56 days'})).toHaveAttribute('aria-current','true');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
 test('unauthenticated export redirects with private response headers',async({request})=>{
   const response=await request.get('/app/export',{maxRedirects:0});
   expect(response.status()).toBe(307);

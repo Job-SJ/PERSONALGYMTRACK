@@ -4,11 +4,20 @@ import {configured} from '../lib/supabase';
 import {Body,Dashboard,GoalView,IntegrationView,SettingsView,TrainingView,rangeValue} from '../components/views';
 import {Shell} from '../components/shell';
 import {intelligencePeriod} from '../lib/daily-intelligence';
-export default async function Home({searchParams}:{searchParams:Promise<{tab?:string;days?:string;muscle?:string;intelligence?:string}>}){
+import {athleteExperience} from '../components/athlete-nav';
+import {dayKey} from '../lib/analytics';
+import type {AthleteQuery} from '../components/athlete-experiences';
+export default async function Home({searchParams}:{searchParams:Promise<AthleteQuery&{tab?:string;days?:string;muscle?:string;intelligence?:string}>}){
   if (!configured()) {
-    const {tab,days,muscle,intelligence}=await searchParams;
+    const query=await searchParams;
+    const {tab,days,muscle,intelligence}=query;
     const data={workouts:[],templates:new Map(),measurements:[]};
     const range=rangeValue(days);
+    const athlete=tab==='analytics'?athleteExperience(query.view):undefined;
+    if(athlete){
+      const {AthleteExperiences}=await import('../components/athlete-experiences');
+      return <Shell preview previewTab="analytics"><AthleteExperiences active={athlete} data={{...data,today:dayKey(new Date()),locale:'en-GB'}} query={query} preview/></Shell>;
+    }
     return <Shell preview previewTab={tab==='dashboard'?'':tab}>{tab==='integrations'?<IntegrationView available={false} syncAt={null} preview/>:
     tab==='body'?<Body rows={[]} preview/>:tab==='goals'?<GoalView goals={[]} workouts={[]} rows={[]} preview/>:
     tab==='settings'?<SettingsView theme="dark" preview/>:

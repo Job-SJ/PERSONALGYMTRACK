@@ -34,7 +34,7 @@ describe('Daily Intelligence',()=>{
     const result=report([...baseline,...train(recent,[73,74,74])]);
     expect(result.headline).toBe('Estimated strength has dipped.');
     expect(result.indicators[0].value).toBe('-7.5%');
-    expect(result.insights).toContainEqual(expect.objectContaining({href:'/app/exercises/bench?days=30'}));
+    expect(result.insights).toContainEqual(expect.objectContaining({href:'/app/analytics?view=replay&exercise=bench&length=30'}));
     expect(result.summary).not.toMatch(/recover|fatigue|injury/i);
   });
 

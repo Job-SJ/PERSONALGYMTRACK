@@ -27,6 +27,7 @@ You can open the interface without an account in **setup mode**. Connect your ow
 | **Dashboard** | Review training volume, working sets, frequency, bodyweight, today's logged calories, and recent personal records. Switch metrics, zoom charts, and open the underlying data tables. |
 | **Calendar and workouts** | Browse month, week, and year views, see training totals on an activity heatmap, search your workout history, and open sessions to review sets, reps, weight, and RPE. |
 | **Exercise and muscle analytics** | Track estimated one-rep max, recorded load, and rep-specific records. Select a region on the front or back muscle map to see direct and secondary sets and exercise progression. |
+| **Athlete experience** | Open Training analytics to compare historical periods in Performance Replay, build a private Strength Passport PNG, or explore six dimensions of your recorded training style in Training Fingerprint. |
 | **Nutrition** | Log food by meal and portion, reuse favorites and recipes, set calorie and macro targets, and compare completed diary days with bodyweight or estimated strength trends. |
 | **Body measurements and goals** | Record bodyweight and other measurements, review weight trends, set workout-frequency or weight goals, and explore a recap of a selected training period. |
 | **Workspace** | Use light, dark, or OLED themes, navigate with the keyboard and search, manage account security, and download a JSON export of training, measurements, goals, and workspace settings. |

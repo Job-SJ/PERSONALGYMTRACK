@@ -1,5 +1,6 @@
 import {Suspense} from 'react';
 import {DailyIntelligence,IntelligenceLoading} from './daily-intelligence';
+import {AthleteNav} from './athlete-nav';
 import type {IntelligencePeriod} from '../lib/daily-intelligence';
 import type {diaryCalories} from '../lib/nutrition';
 import {MetricChart} from './metric-chart';
@@ -262,7 +263,7 @@ export function TrainingView({data,tab,slug,days,q,formula,preview=false}:{data:
     const top=Object.entries(totals).sort((a,b)=>b[1].direct-a[1].direct).find(([,v])=>v.direct>0);
     return <><Heading section="TRAINING WRAPPED" title="Your training in review" description="A recap of the selected training period.">{filter}</Heading><div className="wrapped-hero"><Activity/><p>WORKOUTS LOGGED</p><strong>{current.length}</strong><span>{number(sum(m.map(v=>v.minutes))/60,1,locale)} training hours</span></div><Stats items={[{label:'Most direct sets',value:top?muscles[top[0] as keyof typeof muscles]:'—'},{label:'Longest streak',value:streaks(current,dayKey(new Date())).longest+' days'},{label:'Working sets',value:sum(m.map(v=>v.sets))},{label:'Records set in period',value:bestRecords(workouts,templates).filter(r=>current.some(w=>w.id===r.workout)).length}]}/><Card title="Activity calendar"><ActivityCalendar workouts={current}/></Card></>;
   }
-  return <><Heading section="PERFORMANCE" title="Training analytics" description="Measure working-set volume and workout frequency over time.">{filter}</Heading><Card title="Training performance" subtitle="Weekly training totals and dated weigh-ins"><TrainingPerformanceChart {...data} workouts={current} days={days}/></Card><Card title="Training frequency"><ActivityCalendar workouts={current}/></Card></>;
+  return <><Heading section="PERFORMANCE" title="Training analytics" description="Measure working-set volume and workout frequency over time.">{filter}</Heading><AthleteNav preview={preview}/><Card title="Training performance" subtitle="Weekly training totals and dated weigh-ins"><TrainingPerformanceChart {...data} workouts={current} days={days}/></Card><Card title="Training frequency"><ActivityCalendar workouts={current}/></Card></>;
 }
 export function Body({rows,locale='en-GB',preview=false}:{rows:Measurement[];locale?:Locale;preview?:boolean}){
   const weights=rows.filter(r=>r.kind==='weight').sort((a,b)=>a.day.localeCompare(b.day));

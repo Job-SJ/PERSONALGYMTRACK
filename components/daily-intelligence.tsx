@@ -2,6 +2,7 @@
 import {ArrowUpRight} from 'lucide-react';
 import {dailyIntelligence,intelligencePeriods,intelligenceWindows,type IntelligencePeriod} from '../lib/daily-intelligence';
 import {formatDate,type Locale} from '../lib/format';
+import {athleteHref} from './athlete-nav';
 
 type ReportInput=Parameters<typeof dailyIntelligence>[0];
 type Diary={trend:NonNullable<ReportInput['nutrition']>}|null;
@@ -73,8 +74,10 @@ export async function DailyIntelligence({input,diary,chartDays,preview,updatedAt
           <li>Relative estimates use a weigh-in from the session date or the preceding seven days. Intake uses diary days marked complete with known calories. These are observations about your recorded data.</li>
         </ul>
       </details>
-      {!preview&&<small>Updated <time dateTime={updatedAt}>{formatDate(updatedAt,locale,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</time>
-        {nutrition===null&&<span> · Nutrition trends unavailable</span>}<span className="sr-only"> · Comparisons through {formatDate(through,locale)}</span></small>}
+      <div className="intelligence-footer-meta"><Link href={athleteHref('replay',preview)} prefetch={false}>Explore training history</Link>
+        {!preview&&<small>Updated <time dateTime={updatedAt}>{formatDate(updatedAt,locale,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</time>
+          {nutrition===null&&<span> · Nutrition trends unavailable</span>}<span className="sr-only"> · Comparisons through {formatDate(through,locale)}</span></small>}
+      </div>
     </div>
   </section>;
 }
