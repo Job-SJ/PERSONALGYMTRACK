@@ -46,6 +46,7 @@ test('unauthenticated export redirects with private response headers',async({req
 test('calendar switches periods, views and weekday order without page overflow',async({page},info)=>{
   await page.emulateMedia({reducedMotion:'reduce'});
   await page.goto('/?tab=calendar');
+  await expect(page.locator('.mobile-nav a[title="Workout history"]')).toHaveAttribute('aria-current','location');
   await page.screenshot({path:info.outputPath('calendar-dark.png')});
   await page.locator('.workspace').evaluate(node=>{node.classList.replace('theme-dark','theme-light');});
   await expect(page.locator('.workspace')).toHaveCSS('background-color','rgb(242, 245, 247)');

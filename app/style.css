@@ -159,7 +159,7 @@ input,select{min-width:0;max-width:100%;background:var(--bg);border:1px solid va
 .panel{padding:13px 15px}.panel-head{margin-bottom:10px}
 .row>span:last-child,.rows summary>span:last-child{text-align:right}
 .chart-data summary{cursor:pointer;width:fit-content;padding:4px 8px;border:1px solid var(--line);background:var(--raised);border-radius:6px}
-.mobile-nav a[aria-current=page]{background:var(--raised);border-radius:7px;color:var(--accent)}
+.mobile-nav a[aria-current]{background:var(--raised);border-radius:7px;color:var(--accent)}
 @media(max-width:580px){.topbar{height:45px}.content{padding-top:16px}.facts{grid-template-columns:minmax(0,1fr) minmax(0,1.5fr)}.range{max-width:100%;flex-wrap:wrap}}
 
 .training-calendar{display:grid;gap:14px}.calendar-controls{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px}.calendar-controls label{display:flex;align-items:center;gap:6px;font-size:.83rem;color:var(--muted)}

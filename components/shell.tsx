@@ -67,7 +67,8 @@ export function Shell({children,preview=false,theme='dark',previewTab=''}:{child
     }
   }
   function navLink([key,label,Icon]:Destination,shortLabel?:string){
-    return <Link title={label} aria-label={label} aria-current={key===section?'page':undefined} key={key} href={href(key)} onNavigate={event=>navigate(key,event)}><Icon size={17}/><span>{shortLabel??label}</span></Link>;
+    const current=key===section?'page':shortLabel==='Training'&&inTraining?'location':undefined;
+    return <Link title={label} aria-label={label} aria-current={current} key={key} href={href(key)} onNavigate={event=>navigate(key,event)}><Icon size={17}/><span>{shortLabel??label}</span></Link>;
   }
   const destination=pages.find(([key])=>key===section);
   const detail=!preview&&path.split('/').length>3;
@@ -77,7 +78,7 @@ export function Shell({children,preview=false,theme='dark',previewTab=''}:{child
     <aside className="sidebar"><Link href={href('')} onNavigate={event=>navigate('',event)} className="brand" aria-label="PERSONALGYMTRACK dashboard"><span className="brand-icon"><Activity size={19}/></span><span className="brand-name">PERSONAL<span>GYM</span>TRACK</span></Link>
     <nav aria-label="Main navigation">
       {navLink(overview)}
-      <button type="button" className="nav-disclosure" data-active={inTraining||undefined} aria-label="Training" aria-expanded={trainingVisible} aria-controls="training-navigation" onClick={()=>{setOpenTraining(collapsed||!trainingVisible);setCollapsed(false);}}><Dumbbell size={17}/><span>Training</span><ChevronDown className="nav-chevron" size={14}/></button>
+      <button type="button" className="nav-disclosure" data-active={inTraining||undefined} aria-label="Training" aria-expanded={trainingVisible&&!collapsed} aria-controls="training-navigation" onClick={()=>{setOpenTraining(collapsed||!trainingVisible);setCollapsed(false);}}><Dumbbell size={17}/><span>Training</span><ChevronDown className="nav-chevron" size={14}/></button>
       <div id="training-navigation" className="nav-children" hidden={!trainingVisible||collapsed}>{training.map(item=>navLink(item))}</div>
       {primary.map(item=>navLink(item))}
     </nav>
