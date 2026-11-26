@@ -183,3 +183,69 @@ a.row:hover,.rows summary:hover{background:var(--raised)}.sidebar nav a[aria-cur
 @media(max-width:580px){.anatomy svg{height:170px}.chart-controls select{padding:5px}.record-table td,.record-table th{font-size:.75rem}.calendar-totals div{padding:6px}.content .heading{gap:8px}}
 
 .trend .plot-tooltip{top:42%;z-index:1}.trend .plot-tooltip,.trend .plot-empty{max-width:96%}
+
+/* Compact workspace navigation and shared panel rhythm. */
+.workspace{grid-template-columns:194px minmax(0,1fr)}
+.workspace.collapsed{grid-template-columns:60px minmax(0,1fr)}
+.sidebar{padding:15px 10px 10px;gap:19px}
+.brand{min-height:34px;padding:0 5px}
+.brand-icon{width:29px;height:29px}
+.brand-name{font-size:.74rem}
+.sidebar nav a,.nav-disclosure,.sidebar .collapse{min-height:35px;padding:6px 9px;gap:9px}
+.nav-disclosure{display:flex;align-items:center;width:100%;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:.87rem;text-align:left}
+.nav-disclosure:hover,.nav-disclosure[data-active=true]{background:var(--raised);color:var(--text)}
+.nav-disclosure[data-active=true]>svg:first-child{color:var(--accent)}
+.nav-chevron{margin-left:auto;transition:transform .16s ease}
+.nav-disclosure[aria-expanded=true] .nav-chevron{transform:rotate(180deg)}
+.nav-children{margin-left:15px;padding-left:5px;border-left:1px solid var(--line)}
+.sidebar .nav-children a{font-size:.79rem}
+.collapsed .nav-disclosure span,.collapsed .nav-chevron{display:none}
+.collapsed .sidebar nav a,.collapsed .nav-disclosure,.collapsed .sidebar .collapse{justify-content:center}
+.topbar{height:45px;font-size:.79rem}
+.topbar nav a:hover{text-decoration:underline;text-underline-offset:3px}
+.content{max-width:1370px;padding:20px clamp(16px,3vw,38px) 40px;gap:12px}
+.topbar{padding-inline:clamp(16px,3vw,38px)}
+.content h1{font-size:clamp(1.65rem,2.65vw,2.35rem);letter-spacing:-.055em;margin-bottom:5px;overflow-wrap:anywhere}
+.heading{margin:0 0 3px}
+.heading .eyebrow{margin-bottom:5px;font-size:.64rem;letter-spacing:.12em}
+.heading p:last-child{font-size:.85rem}
+.panel{border-radius:9px;padding:12px 14px}
+.panel-head{margin-bottom:9px}
+.panel-head h2,.nutrition h2{font-size:1rem}
+.stat{padding:8px 12px;gap:2px}
+.stat strong{font-size:clamp(1.2rem,2vw,1.65rem)}
+.stats,.split{gap:10px}
+.dashboard-primary .trend{min-height:195px;align-content:start}
+.dashboard-primary .anatomy svg{height:165px}
+.dashboard-primary .trend svg{max-height:210px}
+.calendar-day{min-height:56px}
+.form{gap:9px}
+.form input,.form select{min-height:36px}
+.quiet:active,.search:active{transform:translateY(1px)}
+.palette-links a:focus-visible{background:var(--raised);outline-offset:-2px}
+.disclosure>summary{cursor:pointer;font-size:.92rem;font-weight:650}
+.disclosure[open]>summary{margin-bottom:8px}
+.disclosure[open]>.detail,.disclosure[open]>.rows{animation:reveal .15s ease-out}
+.nutrition{gap:10px}
+.nut-heading{padding:0 0 4px}
+.nut-panel{gap:8px}
+.nut-overview .nut-energy{grid-template-columns:105px minmax(0,1fr)}
+.nut-insights{display:grid;gap:9px}
+.nut-insights>summary{color:var(--muted)}
+.nut-insights .nut-stats{gap:8px}
+.nut-meal-title h2{overflow-wrap:anywhere}
+.loading-heading{max-width:215px;min-height:24px}
+.loading-skeleton{min-height:170px}
+@media(max-width:820px){
+  .workspace .mobile-nav{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .workspace .mobile-nav a,.workspace .mobile-nav button{min-height:44px}
+  .content{padding-bottom:84px}
+}
+@media(max-width:580px){
+  .content,.topbar{padding-inline:12px}
+  .content{padding-top:13px}
+  .panel{padding:10px 11px}
+  .heading{gap:7px}
+  .calendar-day{min-height:43px}
+  .dashboard-primary .trend{min-height:0}
+}

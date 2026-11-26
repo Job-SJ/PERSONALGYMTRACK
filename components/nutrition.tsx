@@ -139,13 +139,13 @@ export function Nutrition({today,entries,targets,library,complete,weights,streng
           </div>)}
         </section>
       </div>
-      <div className="nut-stats">{[7,30].map(length=>{
+      <details className="panel disclosure nut-insights"><summary>Intake averages and diary coverage</summary><div className="nut-stats">{[7,30].map(length=>{
         const {mean,count}=period(length);
         return <div className="stat" key={length}><small>{length===7?'7-day average':'30-day average'}</small><strong>{mean==null?'—':amount(mean)+' kcal'}</strong><small>{count} confirmed {count===1?'day':'days'} with known calories</small></div>;
       })}
       <div className="stat"><small>Diary coverage</small><strong>{confirmed.has(day)?'Complete':'Incomplete'}</strong>
         <label className="nut-check"><input type="checkbox" checked={confirmed.has(day)} disabled={setup||busy}
-          onChange={event=>void persist({type:'complete',day,complete:event.target.checked},event.target.checked?'Day marked complete.':'Day reopened.')}/> I logged everything for this date</label></div></div>
+          onChange={event=>void persist({type:'complete',day,complete:event.target.checked},event.target.checked?'Day marked complete.':'Day reopened.')}/> I logged everything for this date</label></div></div></details>
       <details className="panel nut-panel nut-daily-values"><summary>Daily nutrient totals</summary><NutrientValues values={daily}/></details>
       {!!recent.length&&!foodSearch&&!draft&&<section className="panel nut-panel"><h2>Recently logged</h2><div className="nut-controls">
         {recent.map(portion=><button key={JSON.stringify(portion.food)} className="quiet" disabled={busy} onClick={()=>pick(portion)}>{portion.food.name}</button>)}</div></section>}
