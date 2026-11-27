@@ -1,0 +1,21 @@
+# PERSONALGYMTRACK 2.0 checklist
+
+- [x] Start from GitHub main on the v2 feature branch.
+- [x] Per-user Hevy key storage, authenticated encryption, rotation workflow, and legacy migration.
+- [x] Invite-only default and optional confirmed signup.
+- [x] Weekly adaptive nutrition estimate and explicit target review.
+- [x] PWA manifest, icons, service worker, update prompt, and offline screen.
+- [x] Dockerfile, Compose configuration, and operator instructions.
+- [ ] Live confirmation and Hevy verification with synthetic accounts.
+- [x] OpenRouter provider, budget, consent, setup, conversation storage, and Coach.
+- [x] Notification scheduling, notification center, and Web Push.
+- [x] Expo app, authenticated mobile APIs, MFA and PKCE recovery, and push registration.
+- [x] Operator-only first-run CLI wizard, Supabase connectivity checks, and migration detection.
+- [ ] Hosted OpenRouter smoke test with an opted-in synthetic account.
+- [ ] Physical device enrollment, recovery, and Web Push/Expo delivery verification.
+- [x] Synthetic desktop and mobile Chromium review in light and dark themes.
+- [x] Dashboard baseline comparison against e357483 and fresh baseline installation.
+- [x] Local web and native production bundles, lint, type checks, 59 unit/database tests, 26 Chromium tests, and dependency audits.
+- [x] Review web and native bundles for server secret variable names.
+- [x] GitHub clean installs, production browser tests, native bundles, Docker build and runtime smoke test, dependency audits, and history scan. [CI for implementation commit](https://github.com/Job-SJ/PERSONALGYMTRACK/actions/runs/46077745533)
+- [x] Push implementation and verification evidence to [PR #5](https://github.com/Job-SJ/PERSONALGYMTRACK/pull/5).

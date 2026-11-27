@@ -3,6 +3,7 @@ import {authCookieOptions} from '../lib/connection-env';
 import {searchFoods} from '../app/nutrition-actions';
 
 vi.mock('../lib/supabase',()=>({session:vi.fn().mockResolvedValue({})}));
+vi.mock('server-only',()=>({}));
 
 afterEach(()=>vi.unstubAllGlobals());
 

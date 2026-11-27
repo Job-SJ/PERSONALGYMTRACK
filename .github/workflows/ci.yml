@@ -56,3 +56,57 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          PGT_E2E_PRODUCTION: '1'
+      - run: npm run test:e2e:private
+      - run: npm audit --audit-level=high
+
+  mobile:
+    name: Expo bundle
+    needs: secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPO_NO_TELEMETRY: '1'
+      EXPO_OFFLINE: '1'
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build:verify
+      - run: npm audit --audit-level=high
+
+  container:
+    name: Docker smoke test
+    needs: secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: docker build --tag pgt-ci .
+      - name: Run the image without provider credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(docker inspect pgt-ci --format '{{.Config.User}}')" = node
+          docker run --detach --name pgt-ci --publish 127.0.0.1:3000:3000 pgt-ci
+          cleanup() {
+            if [ "$?" -ne 0 ]; then docker logs pgt-ci; fi
+            docker rm --force pgt-ci >/dev/null
+          }
+          trap cleanup EXIT
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 --max-time 3 +            http://127.0.0.1:3000/api/health | jq --exit-status '.status == "ok"'
+          curl --fail --silent --show-error http://127.0.0.1:3000/manifest.webmanifest | jq --exit-status '.display == "standalone"'

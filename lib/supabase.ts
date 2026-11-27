@@ -6,6 +6,7 @@ import {authCookieOptions,configuredSupabase} from './connection-env';
 
 export const config=()=>configuredSupabase();
 export const configured=()=>Boolean(config());
+export const publicRegistration=()=>configured()&&process.env.PGT_PUBLIC_REGISTRATION==='true';
 export async function db() {
   const connection=config();
   if (!connection) throw new Error('The Supabase connection configuration is invalid.');
@@ -21,6 +22,7 @@ export async function session() {
   const {data,error}=await client.auth.getUser();
   if (error || !data.user) redirect('/login');
   const {data:aal,error:aalError}=await client.auth.mfa.getAuthenticatorAssuranceLevel();
-  if (aalError || (aal.nextLevel==='aal2' && aal.currentLevel!=='aal2')) redirect('/mfa');
+  const verified=data.user.factors?.some(factor=>factor.status==='verified');
+  if (aalError || ((verified||aal.nextLevel==='aal2') && aal.currentLevel!=='aal2')) redirect('/mfa');
   return {client,user:data.user};
 }

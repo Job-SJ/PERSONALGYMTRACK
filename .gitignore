@@ -1,5 +1,13 @@
 # Dependencies and generated files
 node_modules/
+.expo/
+mobile/dist/
+mobile/android/
+mobile/ios/
+google-services.json
+GoogleService-Info.plist
+*.mobileprovision
+*.p8
 .next/
 .npm-cache/
 *.tsbuildinfo
