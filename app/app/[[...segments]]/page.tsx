@@ -3,6 +3,7 @@ import {Suspense} from 'react';
 import {localeCookie,resolveLocale} from '../../../lib/format';
 import {notFound} from 'next/navigation';
 import {session} from '../../../lib/supabase';
+import {credentialsConfigured,integrationCredentials} from '../../../lib/integration-credentials';
 import {dataFor,read} from '../../../lib/data';
 import type {Workout} from '../../../lib/model';
 import {dayKey,shiftDay} from '../../../lib/analytics';
@@ -41,11 +42,12 @@ export default async function Page({params,searchParams}:{params:Promise<{segmen
     read<{day:string}>(client,'nutrition_days','day','day',undefined,dates),
   ]).then(([entries,complete])=>diaryCalories(entries,new Set(complete.map(row=>row.day)),today)).catch(()=>null):undefined;
   const training=!['body','goals','settings','integrations'].includes(tab);
-  const [raw,goalWorkouts,mfa,jar]=await Promise.all([
+  const [raw,goalWorkouts,mfa,jar,hevyStatus]=await Promise.all([
     dataFor(client,{workouts:training,templates:training,measurements:athlete!=='fingerprint'&&(['','body','goals','analytics'].includes(tab)||(tab==='exercises'&&Boolean(slug))),goals:tab==='goals',sync:tab===''||tab==='integrations'}),
     tab==='goals'?read<Pick<Workout,'started_at'>>(client,'workouts','started_at','started_at','id'):[],
     tab==='settings'?client.auth.mfa.listFactors():null,
     cookies(),
+    tab==='integrations'?integrationCredentials({client,user},'hevy').connected().catch(()=>false):false,
   ]);
   const locale=resolveLocale(jar.get(localeCookie)?.value);
   const data={...raw,locale,templates:new Map(raw.templates.map(t=>[t.id,t]))};
@@ -62,7 +64,7 @@ export default async function Page({params,searchParams}:{params:Promise<{segmen
     tab==='body'?<Body locale={locale} rows={raw.measurements}/>:
     tab==='goals'?<GoalView goals={raw.goals} workouts={goalWorkouts} rows={raw.measurements}/>:
     tab==='settings'?<SettingsView theme={theme} locale={locale} email={user.email} mfaEnabled={Boolean(mfa?.data?.totp.length)}/>:
-    tab==='integrations'?<IntegrationView syncAt={syncAt} lastError={raw.sync?.last_error} available={Boolean(process.env.HEVY_API_KEY)&&user.id===process.env.HEVY_OWNER_ID}/>:
+    tab==='integrations'?<IntegrationView syncAt={syncAt} lastError={raw.sync?.last_error} available={hevyStatus} canConfigure={credentialsConfigured()}/>:
     <TrainingView data={data} tab={tab} slug={slug} days={days} q={query.q} formula={query.formula}/>}
   </Shell>;
 }

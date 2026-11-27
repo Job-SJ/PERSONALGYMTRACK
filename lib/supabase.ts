@@ -6,6 +6,7 @@ import {authCookieOptions,configuredSupabase} from './connection-env';
 
 export const config=()=>configuredSupabase();
 export const configured=()=>Boolean(config());
+export const publicRegistration=()=>configured()&&process.env.PGT_PUBLIC_REGISTRATION==='true';
 export async function db() {
   const connection=config();
   if (!connection) throw new Error('The Supabase connection configuration is invalid.');

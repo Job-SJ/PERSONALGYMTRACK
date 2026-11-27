@@ -4,10 +4,11 @@ import {localeCookie,resolveLocale} from '../lib/format';
 import {redirect} from 'next/navigation';
 import {revalidatePath} from 'next/cache';
 import {z} from 'zod';
-import {configured,db,session} from '../lib/supabase';
+import {configured,db,publicRegistration,session} from '../lib/supabase';
 import {hevy,HevyError} from '../lib/hevy';
 import {runSync} from '../lib/sync';
 import {parseCsv} from '../lib/csv';
+import {integrationCredentials} from '../lib/integration-credentials';
 
 const back=(section:string,status:string)=>redirect('/app/'+section+'?status='+encodeURIComponent(status));
 export async function login(form:FormData) {
@@ -22,6 +23,14 @@ export async function login(form:FormData) {
 export async function logout() {
   if (configured()) await (await db()).auth.signOut({scope:'local'});
   redirect('/');
+}
+export async function register(form:FormData){
+  if(!publicRegistration()) redirect('/login');
+  const input=z.object({email:z.email().max(254),password:z.string().min(12).max(72)}).safeParse(Object.fromEntries(form));
+  if(!input.success) redirect('/register?status=invalid');
+  const client=await db();
+  await client.auth.signUp(input.data);
+  redirect('/register?status=check-email');
 }
 export async function sendReset(form:FormData) {
   const email=z.email().max(254).safeParse(form.get('email'));
@@ -67,22 +76,47 @@ export async function setPassword(form:FormData) {
   back('settings',result.error?'Password could not be updated.':'Password updated.');
 }
 export async function sync(form:FormData) {
-  const {client,user}=await session();
-  const key=process.env.HEVY_API_KEY;
-  if (!key || user.id!==process.env.HEVY_OWNER_ID) back('integrations','Hevy is unavailable for this account.');
+  const authenticated=await session();
+  const credentials=integrationCredentials(authenticated,'hevy');
   let status='Synchronization complete.';
   try {
+    const key=await credentials.read();
+    if(!key) throw new HevyError('Connect Hevy before synchronizing.');
     if (form.get('mode')==='test') {
-      await hevy(key!).test(AbortSignal.timeout(12000));
+      if(process.env.SUPABASE_SERVER_SECRET && !await credentials.reserveHevyCheck()) throw new HevyError('Wait 15 seconds before testing again.');
+      await hevy(key).test(AbortSignal.timeout(12000));
       status='Hevy connection verified.';
     } else {
-      await runSync(client,user.id,key!);
+      await runSync(authenticated.client,authenticated.user.id,key);
       revalidatePath('/app');
     }
   } catch(err) {
     status=err instanceof HevyError?err.message:'Synchronization failed.';
   }
   revalidatePath('/app','layout');
+  back('integrations',status);
+}
+export async function configureHevy(form:FormData) {
+  const credentials=integrationCredentials(await session(),'hevy');
+  const mode=z.enum(['connect','disconnect','migrate']).safeParse(form.get('mode'));
+  if(!mode.success) return back('integrations','Choose a valid connection action.');
+  let status:string;
+  try {
+    if(mode.data==='disconnect'){
+      await credentials.disconnect();
+      status='Hevy disconnected. Imported workouts are still available.';
+    }else{
+      const key=z.string().trim().regex(/^[\x21-\x7e]{8,512}$/).safeParse(mode.data==='migrate' ? await credentials.read() : form.get('key'));
+      if(!key.success) throw new HevyError('Enter a valid Hevy API key.');
+      if(!await credentials.reserveHevyCheck()) throw new HevyError('Wait 15 seconds before testing again.');
+      await hevy(key.data).test(AbortSignal.timeout(12000));
+      await credentials.save(key.data);
+      status='Hevy connection verified and saved.';
+    }
+  }catch(error){
+    status=error instanceof HevyError ? error.message : 'Hevy settings could not be saved. Check instance configuration and try again.';
+  }
+  revalidatePath('/app/integrations');
   back('integrations',status);
 }
 export async function importCsv(form:FormData) {

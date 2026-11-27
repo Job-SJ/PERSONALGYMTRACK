@@ -55,7 +55,9 @@ Copy [`.env.example`](.env.example) to `.env.local` from the repository root. Us
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://YOUR_PROJECT_REF.supabase.co` | Signing in and saving records |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `YOUR_SUPABASE_PUBLISHABLE_KEY` | Signing in and saving records |
-| `HEVY_API_KEY` | `YOUR_HEVY_API_KEY` | Optional Hevy API sync |
+| `SUPABASE_SERVER_SECRET`, `INTEGRATION_KEYS`, `INTEGRATION_ACTIVE_KEY` | See [credential vault setup](docs/self-hosting.md#hevy-credential-storage) | Optional per-user Hevy connections |
+| `PGT_PUBLIC_REGISTRATION` | `false` | Set to `true` only with confirmed signup enabled in Supabase Auth |
+| `HEVY_API_KEY` | `YOUR_HEVY_API_KEY` | Legacy Hevy migration only |
 | `HEVY_OWNER_ID` | `YOUR_SUPABASE_USER_UUID` | Required with the Hevy key. Use the invited user's **User UID** from Supabase Auth. |
 | `OPEN_FOOD_FACTS_CONTACT` | `operator@example.com` | Optional operator contact included in food lookup requests |
 
@@ -72,7 +74,7 @@ Get the Supabase URL and **publishable** key from your project's Connect dialog.
    supabase db push --dry-run --remote
    ```
 
-   Once you confirm the target and pending files, run `supabase db push --remote`. The four [migrations](supabase/migrations) run in filename order. They create the training and body measurement schema, add MFA enforcement, manage sync state, and add the nutrition diary. On an existing project, compare its migration history and schema before applying pending changes. See the [Supabase migration workflow](https://supabase.com/docs/guides/local-development/cli-workflows).
+   Once you confirm the target and pending files, run `supabase db push --remote`. The [migrations](supabase/migrations) run in filename order. They create the training and body measurement schema, add MFA enforcement, manage sync state, and add the nutrition diary. On an existing project, compare its migration history and schema before applying pending changes. See the [Supabase migration workflow](https://supabase.com/docs/guides/local-development/cli-workflows).
 
 2. In Supabase Auth, disable public signup for an invite-only workspace. Set the Auth Site URL to the app origin you intend to open from email, such as `http://localhost:3000` for local testing. Configure allowed redirect URLs and email delivery for that environment.
 3. In the Supabase [email templates](https://supabase.com/docs/guides/auth/auth-email-templates), point the **Invite** and **Reset Password** links to the app's confirmation route.
@@ -86,7 +88,7 @@ Get the Supabase URL and **publishable** key from your project's Connect dialog.
 
 ### Import your workouts
 
-**Hevy API.** Create a key in [Hevy Developer Settings](https://hevy.com/settings?developer), configure `HEVY_API_KEY` and `HEVY_OWNER_ID`, then restart the server. Sign in as that user and open **Settings → Integrations → Test connection → Sync workouts**. Sync runs on demand. It imports workouts and exercise templates, then reconciles later edits and deletions. [Hevy developer documentation](https://developers.hevy.com/)
+**Hevy API.** Configure the [server-side credential vault](docs/self-hosting.md#hevy-credential-storage) once for the instance. Each user creates a key in [Hevy Developer Settings](https://hevy.com/settings?developer), then opens **Settings ? Integrations** to test and save it. Run **Sync workouts** to import workouts and exercise templates and reconcile later edits and deletions.
 
 **CSV.** You can also upload a Hevy export under 1.5 MB from **Integrations**. Choose one source for the same workout history to avoid duplicates. CSV exercises lack the template metadata needed for mapped muscles, loaded volume, and estimated one-rep max.
 
@@ -137,9 +139,11 @@ npm run test:e2e
 
 Playwright runs the setup experience in desktop and mobile Chromium. Stop any development server running from this checkout first so Playwright can start its own instance. Set `PGT_BROWSER_PATH` to use an existing Chromium-based browser, or set `PGT_E2E_PRODUCTION=1` after building to test the production server. Screenshots and reports are ignored by Git.
 
-The latest application verification passed lint, type checking, the production build, **24 unit and integration tests**, and **12 Playwright tests**. The database tests use embedded PostgreSQL with two synthetic owners. A separate loopback fixture covered authenticated pages and nutrition logging, and browser screenshots covered both themes at four viewport widths. Hosted provider and deployment checks are listed in the [security audit](docs/security-audit.md).
+The database tests use embedded PostgreSQL and synthetic accounts. Hosted provider and deployment checks are tracked in the [security audit](docs/security-audit.md).
 
 ## Deployment
+
+For Docker Compose, HTTPS configuration, and mobile installation, see the [self-hosting guide](docs/self-hosting.md).
 
 The repository includes a [Vercel configuration](vercel.json) for Next.js functions in Frankfurt. For a restricted preview:
 
@@ -151,7 +155,7 @@ The repository includes a [Vercel configuration](vercel.json) for Next.js functi
 
 ## Known limitations
 
-- A deployment supports one Hevy API owner. Large initial imports can hit the sync timeout. The application supports manual sync and CSV import.
+- Large initial imports can hit the sync timeout. The application supports manual sync and CSV import.
 - Workout dates use Europe/Amsterdam. CSV timestamps in daylight-saving gaps or overlaps need an explicit UTC offset.
 - Open Food Facts labels may be incomplete. Unknown nutrient values remain unknown, and intake averages use diary days marked complete with known calories.
 - The JSON export covers training and workspace records. Nutrition is stored separately and is outside the current export.

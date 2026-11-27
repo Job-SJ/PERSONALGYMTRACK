@@ -390,3 +390,8 @@ a.row:hover,.rows summary:hover{background:var(--raised)}.sidebar nav a[aria-cur
   .replay-compare th small{font-size:.63rem}
   .intelligence-footer-meta{justify-content:flex-start}
 }
+.app-update{position:fixed;right:max(1rem,env(safe-area-inset-right));top:max(1rem,env(safe-area-inset-top));z-index:10}
+@media(display-mode:standalone){
+  body{padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+  .mobile-nav{left:env(safe-area-inset-left);right:env(safe-area-inset-right)}
+}

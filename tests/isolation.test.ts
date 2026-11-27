@@ -6,7 +6,7 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
   const sql=new PGlite();
   try {
     await sql.exec(`
-      create role anon; create role authenticated;
+      create role anon; create role authenticated; create role service_role bypassrls;
       create schema auth;
       grant usage on schema auth to authenticated;
       create table auth.users(id uuid primary key);
@@ -19,6 +19,7 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
     for(const path of ['migrations/202611250001_core.sql','migrations/202611250002_mfa.sql','migrations/202611250003_sync_lifecycle.sql','migrations/202611260001_nutrition.sql','tests/isolation.sql','tests/nutrition_isolation.sql']){
       await sql.exec(await readFile(new URL('../supabase/'+path,import.meta.url),'utf8'));
     }
+    await sql.exec(await readFile(new URL('../supabase/migrations/202611270001_integration_credentials.sql',import.meta.url),'utf8'));
     const [tableCheck,policies,constraints,indexes,rpcCheck]=await sql.exec(await readFile(new URL('../supabase/tests/schema_check.sql',import.meta.url),'utf8'));
     expect(tableCheck.rows).toHaveLength(8);
     for(const table of tableCheck.rows) expect(table).toMatchObject({
@@ -54,6 +55,15 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
     expect((await sql.query("select public.finish_sync($1,now(),null) as finished",[other])).rows).toEqual([{finished:false}]);
     expect((await sql.query("select public.finish_sync($1,now(),null) as finished",[owner])).rows).toEqual([{finished:true}]);
     expect((await sql.query('select public.acquire_sync($1) as granted',[other])).rows).toEqual([{granted:false}]);
+    await expect(sql.query('select envelope from public.integration_credentials')).rejects.toThrow(/permission denied/);
+    await expect(sql.query("select public.reserve_integration_attempt($1,'hevy_connection')",[owner])).rejects.toThrow(/permission denied/);
+    await sql.exec('set role service_role');
+    const reserve=()=>sql.query("select public.reserve_integration_attempt($1,'hevy_connection') as allowed",[owner]);
+    expect((await reserve()).rows).toEqual([{allowed:true}]);
+    expect((await reserve()).rows).toEqual([{allowed:false}]);
+    await sql.query('insert into public.integration_credentials values ($1,$2,$3)',[owner,'hevy',JSON.stringify({version:'synthetic'})]);
+    await sql.query('update public.integration_credentials set envelope=null where user_id=$1 and provider=$2',[owner,'hevy']);
+    expect((await sql.query('select envelope from public.integration_credentials where user_id=$1',[owner])).rows).toEqual([{envelope:null}]);
   } finally {
     await sql.close();
   }

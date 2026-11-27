@@ -8,6 +8,7 @@ import type {Measurement} from '../lib/model';
 import {amount,macros,NutritionCharts,type Intake,type StrengthPoint} from './nutrition-charts';
 import {FoodEditor,FoodSearch,NutrientValues,PortionEditor,type RecentSearch} from './nutrition-food';
 import {NutritionTargets} from './nutrition-targets';
+import {adaptiveMaintenance} from '../lib/adaptive-nutrition';
 
 type Props={today:string;entries:Entry[];targets:Target[];library:LibraryItem[];complete:string[];weights:Measurement[];strength:StrengthPoint[];setup?:boolean};
 type Draft={portion:Portion;id?:string;favoriteId?:string};
@@ -197,7 +198,7 @@ export function Nutrition({today,entries,targets,library,complete,weights,streng
       </section>;
     })}</div>}
     {tab==='Trends'&&<NutritionCharts day={day} intake={intake} targets={targets} weights={weights} strength={strength}/>}
-    {tab==='Targets'&&<NutritionTargets key={day} day={day} target={target} weight={latestWeight} busy={busy||setup} onSave={values=>void persist({type:'targets',day,targets:values},'Daily targets saved.')}/>}
+    {tab==='Targets'&&<NutritionTargets key={day} day={day} target={target} weight={latestWeight} adaptation={adaptiveMaintenance(day,entries,complete,weights)} busy={busy||setup} onSave={values=>void persist({type:'targets',day,targets:values},'Daily targets saved.')}/>}
     {tab==='Favorites & recipes'&&<>
       <section className="panel nut-panel nut-form">
         <div className="nut-between"><h2>Favorites and saved meals</h2><button className="button" disabled={busy||setup} onClick={()=>{closeEditor();setRecipe({name:'',servings:1,portions:[]});}}><Plus size={16}/> New recipe</button></div>
