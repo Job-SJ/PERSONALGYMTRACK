@@ -2,6 +2,13 @@
 
 The Docker container runs the web app. Use a separate managed Supabase project for authentication and PostgreSQL.
 
+Install Docker with Docker Compose and Node.js 22. Clone the repository and run the setup commands from its root.
+
+```sh
+git clone https://github.com/Job-SJ/PERSONALGYMTRACK.git
+cd PERSONALGYMTRACK
+```
+
 1. Follow the README’s Supabase instructions in a separate development project first. Apply the migrations and disable public registration in Supabase Auth for an invitation-only instance.
 2. Run `npm run setup` from a local interactive Node.js 22 terminal. The wizard checks Supabase Auth and the migrated schema, masks the server secret, generates the vault and scheduler keys, and creates `.env` exclusively. Existing configuration stays in place. On Windows, restrict the file's NTFS permissions to the operator. You can also copy `.env.example` to `.env` with `Copy-Item .env.example .env` in PowerShell or `cp .env.example .env` on Linux and macOS and set the variables manually.
 3. Run `docker compose up -d`. Check `docker compose ps` and `curl http://localhost:3000/api/health`. This endpoint checks process availability. Verify database setup separately through the Supabase CLI migration list and a test account.
@@ -16,6 +23,39 @@ gymtrack.example.com {
 ```
 
 For an update, review and apply pending migrations through Supabase, then run `docker compose up -d --build`. To use a published image when one is available, set `PGT_IMAGE` to the release image tag, run `docker compose pull app`, then run `docker compose up -d --no-build`.
+
+## Set up Supabase
+
+1. Create a development Supabase project and install the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started). In a fresh checkout, run `supabase init` once from the repository root to create the CLI configuration. Then link the development project and inspect the migration plan.
+
+   ```sh
+   supabase login
+   supabase link --project-ref YOUR_PROJECT_REF
+   supabase migration list --remote
+   supabase db push --dry-run --remote
+   ```
+
+   Once you confirm the target and pending files, run `supabase db push --remote`. The [migrations](../supabase/migrations) run in filename order. On an existing project, compare its migration history and schema before applying pending changes. See the [Supabase migration workflow](https://supabase.com/docs/guides/local-development/cli-workflows).
+
+2. In Supabase Auth, disable public signup for an invite-only workspace. Set the Auth Site URL to the app origin you intend to open from email, such as `http://localhost:3000` for local testing. Configure allowed redirect URLs and email delivery for that environment.
+3. In the Supabase [email templates](https://supabase.com/docs/guides/auth/auth-email-templates), point the **Invite** and **Reset Password** links to the app's confirmation route.
+
+   ```text
+   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite
+   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery
+   ```
+
+4. Invite yourself from **Authentication → Users**. Open the invitation in your browser, then set a password in **Settings** and optionally enroll an authenticator app. The workspace requires the authenticator code after enrollment. Open [localhost:3000/app](http://localhost:3000/app) after setup.
+
+## Vercel preview
+
+The repository includes a [Vercel configuration](../vercel.json) for Next.js functions in Frankfurt. For a restricted preview:
+
+1. Import the repository into Vercel, choose the Next.js preset and Node.js 22.x, and enable Deployment Protection before sharing the URL.
+2. Use a separate Supabase project for preview. Apply its migrations and set the environment variables for the **Preview** environment in Vercel.
+3. Set the preview project's Supabase Auth Site URL and allowlist to the approved HTTPS origin. Verify invitations and recovery, MFA, isolation between two test accounts, and import and sync behavior before using real records.
+
+[Vercel Git deployment](https://vercel.com/docs/git) · [Environment variables](https://vercel.com/docs/environment-variables) · [Deployment protection settings](https://vercel.com/docs/project-configuration/security-settings)
 
 ## Hevy credential storage
 
