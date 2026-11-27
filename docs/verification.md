@@ -2,6 +2,8 @@
 
 Automated checks use synthetic records and mocked upstream responses. The embedded PostgreSQL tests apply the migrations and verify grants, owner isolation, MFA, budget reservations and reminder deduplication. Production Chromium tests use a loopback Supabase fixture for authenticated web and native API requests. OpenRouter tests use mocked HTTP responses.
 
+GitHub validated a clean Node.js 22 install, 59 unit and database tests, 26 Chromium tests, Android and iOS Hermes exports, both dependency audits, and Gitleaks. The Docker smoke test built the production image, verified its non-root runtime, and served the health endpoint and PWA manifest. [Implementation CI run](https://github.com/Job-SJ/PERSONALGYMTRACK/actions/runs/46077745533)
+
 ## Dashboard comparison
 
 Compared the v2 foundation commit `e357483` with the completed dashboard and navigation changes. Both used production web builds, the same loopback Supabase fixture and the same synthetic account. Desktop Chromium alternated between builds, discarded three warm-up navigations per build and recorded 15 navigations each. Service workers were blocked for this comparison.

@@ -17,5 +17,5 @@
 - [x] Dashboard baseline comparison against e357483 and fresh baseline installation.
 - [x] Local web and native production bundles, lint, type checks, 59 unit/database tests, 26 Chromium tests, and dependency audits.
 - [x] Review web and native bundles for server secret variable names.
-- [ ] Final clean install, native bundle, Docker smoke test, and release scans on the PR commit.
-- [ ] Update draft PR #5 and mark ready after applicable release checks pass.
+- [x] GitHub clean installs, production browser tests, native bundles, Docker build and runtime smoke test, dependency audits, and history scan. [CI for implementation commit](https://github.com/Job-SJ/PERSONALGYMTRACK/actions/runs/46077745533)
+- [x] Push implementation and verification evidence to [PR #5](https://github.com/Job-SJ/PERSONALGYMTRACK/pull/5).
