@@ -395,3 +395,25 @@ a.row:hover,.rows summary:hover{background:var(--raised)}.sidebar nav a[aria-cur
   body{padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
   .mobile-nav{left:env(safe-area-inset-left);right:env(safe-area-inset-right)}
 }
+.coach-workspace{width:100%;max-width:920px;margin-inline:auto;display:grid;gap:1rem}
+.coach-panel{padding:clamp(1rem,3vw,1.5rem);min-width:0}
+.coach-panel h2{font-size:1.05rem;margin:0 0 .45rem}
+.coach-model,.coach-actions{margin-top:1rem}
+.coach-consent{display:flex!important;align-items:flex-start;gap:.65rem}
+.coach-consent input[type=checkbox]{width:auto;margin:4px 0}
+.coach-questions,.coach-replies{display:grid;gap:.6rem}
+.coach-questions{grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))}
+.coach-questions button{text-align:left;border:1px solid var(--line);min-height:44px}
+.coach-answer{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65}
+.workspace-settings{display:none}
+@media(max-width:820px){.workspace-settings{display:inline-flex;align-items:center;min-height:44px}}
+.notification-list{list-style:none;padding:0;margin-bottom:0}
+.notification-list li{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;padding:.8rem 0;border-top:1px solid var(--line)}
+.notification-list li p{margin:.25rem 0 0}
+.notification-options{border:1px solid var(--line);margin:0;padding:.7rem;display:grid;gap:.5rem}
+.topbar-icon{display:inline-flex;align-items:center;min-height:44px}
+.coach-links a{color:var(--text);text-decoration:underline;text-underline-offset:3px}
+.coach-more{margin:.6rem 0}
+.coach-more summary{cursor:pointer;min-height:36px;align-content:center}
+.coach-more .coach-questions{margin-top:.4rem}
+@media(min-width:680px){.notification-options{grid-template-columns:repeat(2,minmax(0,1fr))}}

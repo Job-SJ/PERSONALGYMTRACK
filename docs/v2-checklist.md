@@ -7,9 +7,15 @@
 - [x] PWA manifest, icons, service worker, update prompt, and offline screen.
 - [x] Dockerfile, Compose configuration, and operator instructions.
 - [ ] Live confirmation and Hevy verification with synthetic accounts.
-- [ ] OpenRouter provider, budget, consent, setup, conversation storage, and Coach.
-- [ ] Notification scheduling, notification center, and Web Push.
-- [ ] Expo app, authenticated mobile APIs, MFA redirects, and push registration.
-- [ ] Privileged first-run setup, Supabase validation, and migration detection.
-- [ ] Complete design verification, performance comparison, clean install, Docker build, and release scans.
-- [ ] Push and open the release PR after verification.
+- [x] OpenRouter provider, budget, consent, setup, conversation storage, and Coach.
+- [x] Notification scheduling, notification center, and Web Push.
+- [x] Expo app, authenticated mobile APIs, MFA and PKCE recovery, and push registration.
+- [x] Operator-only first-run CLI wizard, Supabase connectivity checks, and migration detection.
+- [ ] Hosted OpenRouter smoke test with an opted-in synthetic account.
+- [ ] Physical device enrollment, recovery, and Web Push/Expo delivery verification.
+- [x] Synthetic desktop and mobile Chromium review in light and dark themes.
+- [x] Dashboard baseline comparison against e357483 and fresh baseline installation.
+- [x] Local web and native production bundles, lint, type checks, 59 unit/database tests, 26 Chromium tests, and dependency audits.
+- [x] Review web and native bundles for server secret variable names.
+- [ ] Final clean install, native bundle, Docker smoke test, and release scans on the PR commit.
+- [ ] Update draft PR #5 and mark ready after applicable release checks pass.

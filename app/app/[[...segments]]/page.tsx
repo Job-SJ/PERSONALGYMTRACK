@@ -60,7 +60,8 @@ export default async function Page({params,searchParams}:{params:Promise<{segmen
   }
   return <Shell theme={theme}>{query.status&&<div className="notice" role="status">{query.status.slice(0,200)}</div>}
     {tab===''?<Dashboard {...data} days={days} intelligence={intelligence} today={today} updatedAt={updatedAt} syncAt={syncAt} diary={diary}
-      nutrition={diary&&<Suspense fallback={null}><NutritionSummary diary={diary} locale={locale}/></Suspense>}/>:
+      nutrition={<>{diary&&<Suspense fallback={null}><NutritionSummary diary={diary} locale={locale}/></Suspense>}
+        {credentialsConfigured()&&<section className="panel dashboard-nutrition"><div><h2>Coach</h2><p className="muted">Reflect on your recorded training week.</p></div><Link className="quiet" href="/app/coach">Open Coach</Link></section>}</>}/>:
     tab==='body'?<Body locale={locale} rows={raw.measurements}/>:
     tab==='goals'?<GoalView goals={raw.goals} workouts={goalWorkouts} rows={raw.measurements}/>:
     tab==='settings'?<SettingsView theme={theme} locale={locale} email={user.email} mfaEnabled={Boolean(mfa?.data?.totp.length)}/>:

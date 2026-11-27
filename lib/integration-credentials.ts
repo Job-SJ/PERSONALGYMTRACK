@@ -9,15 +9,18 @@ type Provider='hevy'|'openrouter';
 export function credentialsConfigured() {
   return Boolean(config() && process.env.SUPABASE_SERVER_SECRET && process.env.INTEGRATION_KEYS && process.env.INTEGRATION_ACTIVE_KEY);
 }
+export function operatorDb(){
+  const connection=config();
+  const secret=process.env.SUPABASE_SERVER_SECRET;
+  return connection && secret ? createClient(connection.url,secret,{
+    auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
+  }) : null;
+}
 
 export function integrationCredentials({user}:Session,provider:Provider) {
   const scope={owner:user.id,provider};
   const legacy=provider==='hevy' && user.id===process.env.HEVY_OWNER_ID ? process.env.HEVY_API_KEY : undefined;
-  const connection=config();
-  const secret=process.env.SUPABASE_SERVER_SECRET;
-  const client=connection && secret && credentialsConfigured() ? createClient(connection.url,secret,{
-    auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
-  }) : null;
+  const client=credentialsConfigured()?operatorDb():null;
   const keys=()=>credentialKeyring(process.env.INTEGRATION_KEYS!,process.env.INTEGRATION_ACTIVE_KEY!);
   const rows=()=>client!.from('integration_credentials');
   async function find(){
@@ -41,9 +44,9 @@ export function integrationCredentials({user}:Session,provider:Provider) {
       if(!row) return legacy;
       return row.envelope===null ? undefined : openCredential(row.envelope,scope,keys());
     },
-    async reserveHevyCheck(){
+    async reserveCheck(setup=false){
       if(!client) return false;
-      const result=await client.rpc('reserve_integration_attempt',{owner_id:user.id,operation_name:'hevy_connection'});
+      const result=await client.rpc('reserve_integration_attempt',{owner_id:user.id,operation_name:provider+(setup?'_setup':'_connection')});
       if(result.error) throw new Error('Connection checks are unavailable.');
       return result.data===true;
     },

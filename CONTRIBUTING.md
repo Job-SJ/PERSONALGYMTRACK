@@ -17,7 +17,7 @@
 4. Push your branch to your fork and open a pull request targeting upstream `main`. Explain what changed, how you verified it, and any impact on setup or existing data. Use synthetic records in examples and screenshots.
 5. Address feedback on the same branch. Maintainers review changes and merge after the required checks pass.
 
-CI runs lint, type checking, unit and database tests, a production build, and Gitleaks. It uses a GitHub-hosted runner with a read-only token, no production environment, and no repository secrets. Contributions to project-owned code are made under the [MIT License](LICENSE). Keep upstream notices with third-party material.
+CI runs lint, type checking, unit, database and browser tests, production web and Expo builds, a Docker smoke test, dependency audits and Gitleaks. It uses GitHub-hosted runners with read-only tokens and synthetic fixtures. Contributions to project-owned code are made under the [MIT License](LICENSE). Keep upstream notices with third-party material.
 
 ## Develop with isolated data
 

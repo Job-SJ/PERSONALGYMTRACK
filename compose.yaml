@@ -10,3 +10,32 @@ services:
       - .env
     security_opt:
       - no-new-privileges:true
+  scheduler:
+    profiles: ["notifications"]
+    image: node:22-bookworm-slim
+    user: node
+    restart: unless-stopped
+    environment:
+      PGT_NOTIFICATION_JOB_SECRET: ${PGT_NOTIFICATION_JOB_SECRET:-}
+    depends_on:
+      app:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - node
+      - -e
+      - |
+        const tick = async () => {
+          try {
+            const response = await fetch('http://app:3000/api/jobs/notifications', {
+              method: 'POST',
+              headers: {Authorization: 'Bearer ' + process.env.PGT_NOTIFICATION_JOB_SECRET},
+              signal: AbortSignal.timeout(100000)
+            });
+            if (!response.ok) console.error('Notification scheduler returned', response.status);
+            await response.body?.cancel();
+          } catch { console.error('Notification scheduler could not reach the app'); }
+          setTimeout(tick, 60000);
+        };
+        tick();

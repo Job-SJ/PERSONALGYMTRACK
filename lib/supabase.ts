@@ -22,6 +22,7 @@ export async function session() {
   const {data,error}=await client.auth.getUser();
   if (error || !data.user) redirect('/login');
   const {data:aal,error:aalError}=await client.auth.mfa.getAuthenticatorAssuranceLevel();
-  if (aalError || (aal.nextLevel==='aal2' && aal.currentLevel!=='aal2')) redirect('/mfa');
+  const verified=data.user.factors?.some(factor=>factor.status==='verified');
+  if (aalError || ((verified||aal.nextLevel==='aal2') && aal.currentLevel!=='aal2')) redirect('/mfa');
   return {client,user:data.user};
 }

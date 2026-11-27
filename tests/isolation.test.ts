@@ -20,6 +20,8 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
       await sql.exec(await readFile(new URL('../supabase/'+path,import.meta.url),'utf8'));
     }
     await sql.exec(await readFile(new URL('../supabase/migrations/202611270001_integration_credentials.sql',import.meta.url),'utf8'));
+    await sql.exec(await readFile(new URL('../supabase/migrations/202611270002_coach.sql',import.meta.url),'utf8'));
+    await sql.exec(await readFile(new URL('../supabase/migrations/202611270003_notifications.sql',import.meta.url),'utf8'));
     const [tableCheck,policies,constraints,indexes,rpcCheck]=await sql.exec(await readFile(new URL('../supabase/tests/schema_check.sql',import.meta.url),'utf8'));
     expect(tableCheck.rows).toHaveLength(8);
     for(const table of tableCheck.rows) expect(table).toMatchObject({
@@ -57,13 +59,37 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
     expect((await sql.query('select public.acquire_sync($1) as granted',[other])).rows).toEqual([{granted:false}]);
     await expect(sql.query('select envelope from public.integration_credentials')).rejects.toThrow(/permission denied/);
     await expect(sql.query("select public.reserve_integration_attempt($1,'hevy_connection')",[owner])).rejects.toThrow(/permission denied/);
+    await expect(sql.query('select * from public.coach_usage')).rejects.toThrow(/permission denied/);
+    await expect(sql.query('select * from public.coach_settings')).rejects.toThrow(/permission denied/);
+    await expect(sql.query('select * from public.push_registrations')).rejects.toThrow(/permission denied/);
+    await expect(sql.query('select * from public.claim_notification_accounts(10)')).rejects.toThrow(/permission denied/);
+    await expect(sql.query('select public.pgt_schema_ready()')).rejects.toThrow(/permission denied/);
     await sql.exec('set role service_role');
+    expect((await sql.query('select public.pgt_schema_ready() as ready')).rows).toEqual([{ready:true}]);
     const reserve=()=>sql.query("select public.reserve_integration_attempt($1,'hevy_connection') as allowed",[owner]);
     expect((await reserve()).rows).toEqual([{allowed:true}]);
     expect((await reserve()).rows).toEqual([{allowed:false}]);
     await sql.query('insert into public.integration_credentials values ($1,$2,$3)',[owner,'hevy',JSON.stringify({version:'synthetic'})]);
     await sql.query('update public.integration_credentials set envelope=null where user_id=$1 and provider=$2',[owner,'hevy']);
     expect((await sql.query('select envelope from public.integration_credentials where user_id=$1',[owner])).rows).toEqual([{envelope:null}]);
+    await sql.query("insert into public.coach_settings(user_id,enabled,consent_at,model,endpoint,credential_source,prompt_price,completion_price,monthly_micros,revision) values ($1,true,now(),'synthetic/model','synthetic','personal',0,0,100,$2)",[owner,other]);
+    const spend=(requester:string,revision:string,cost:number)=>sql.query('select public.reserve_coach_request($1,$2,$3) as id',[requester,revision,cost]);
+    expect((await spend(other,other,1)).rows).toEqual([{id:null}]);
+    expect((await spend(owner,owner,1)).rows).toEqual([{id:null}]);
+    expect((await spend(owner,other,101)).rows).toEqual([{id:null}]);
+    expect((await spend(owner,other,90)).rows[0]).toEqual({id:expect.any(String)});
+    expect((await spend(owner,other,0)).rows).toEqual([{id:null}]);
+    await sql.query("update public.coach_usage set created_at=now()-interval '30 seconds' where user_id=$1",[owner]);
+    expect((await spend(owner,other,11)).rows).toEqual([{id:null}]);
+    expect((await spend(owner,other,10)).rows[0]).toEqual({id:expect.any(String)});
+    await sql.query("insert into public.notification_preferences(user_id,timezone,reminder_time,quiet_start,quiet_end,categories) values ($1,'Europe/Amsterdam','19:00','22:00','08:00',array['weekly'])",[owner]);
+    expect((await sql.query('select user_id from public.claim_notification_accounts(10)')).rows).toEqual([{user_id:owner}]);
+    expect((await sql.query('select user_id from public.claim_notification_accounts(10)')).rows).toEqual([]);
+    for(let attempt=0;attempt<2;attempt++) await sql.query("insert into public.notifications(user_id,category,period) values ($1,'weekly','synthetic-week') on conflict do nothing",[owner]);
+    expect((await sql.query('select count(*)::int as count from public.notifications where user_id=$1',[owner])).rows).toEqual([{count:1}]);
+    const reservePush=()=>sql.query("select public.reserve_notification_push($1,'2025-04-05') as allowed",[owner]);
+    expect((await reservePush()).rows).toEqual([{allowed:true}]);
+    expect((await reservePush()).rows).toEqual([{allowed:false}]);
   } finally {
     await sql.close();
   }

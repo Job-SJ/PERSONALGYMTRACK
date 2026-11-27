@@ -14,11 +14,14 @@ You can open the interface without an account in **setup mode**. Connect your ow
 <p>
   <img src="docs/screenshots/calendar-mobile.png" alt="Monthly training calendar in the light theme" width="285">
   <img src="docs/screenshots/muscles-mobile.png" alt="Chest training totals and weekly progression in the dark theme" width="285">
+  <img src="docs/screenshots/notifications-mobile.png" alt="Notification preferences on a light-theme mobile workspace" width="285">
 </p>
 
 </details>
 
 *Screenshots show the running app with synthetic workout data.*
+
+[Coach setup screenshot](docs/screenshots/coach-setup.png)
 
 ## Features
 
@@ -30,6 +33,7 @@ You can open the interface without an account in **setup mode**. Connect your ow
 | **Athlete experience** | Open Training analytics to compare historical periods in Performance Replay, build a private Strength Passport PNG, or explore six dimensions of your recorded training style in Training Fingerprint. |
 | **Nutrition** | Log food by meal and portion, reuse favorites and recipes, set calorie and macro targets, and compare completed diary days with bodyweight or estimated strength trends. |
 | **Body measurements and goals** | Record bodyweight and other measurements, review weight trends, set workout-frequency or weight goals, and explore a recap of a selected training period. |
+| **Coach and notifications** | Ask optional, evidence-based fitness questions through OpenRouter. Choose quiet hours and opt into reminders and training updates. |
 | **Workspace** | Use light, dark, or OLED themes, navigate with the keyboard and search, manage account security, and download a JSON export of training, measurements, goals, and workspace settings. |
 
 ## Run locally
@@ -135,15 +139,19 @@ npm test
 npm run build
 npx playwright install chromium
 npm run test:e2e
+npm run test:e2e:private
 ```
 
-Playwright runs the setup experience in desktop and mobile Chromium. Stop any development server running from this checkout first so Playwright can start its own instance. Set `PGT_BROWSER_PATH` to use an existing Chromium-based browser, or set `PGT_E2E_PRODUCTION=1` after building to test the production server. Screenshots and reports are ignored by Git.
+Playwright runs setup and authenticated workspace checks in desktop and mobile Chromium. The authenticated suite uses a loopback fixture and requires a production build. Stop any development server running from this checkout first so Playwright can start its own instances. Set `PGT_BROWSER_PATH` to use an existing Chromium-based browser. Set `PGT_E2E_PRODUCTION=1` after building to exercise the public setup routes and service worker in production. Screenshots and reports are ignored by Git.
 
 The database tests use embedded PostgreSQL and synthetic accounts. Hosted provider and deployment checks are tracked in the [security audit](docs/security-audit.md).
 
 ## Deployment
 
 For Docker Compose, HTTPS configuration, and mobile installation, see the [self-hosting guide](docs/self-hosting.md).
+
+- [OpenRouter Coach setup and privacy](docs/ai-coach.md)
+- [Expo development for Android and iOS](docs/mobile.md)
 
 The repository includes a [Vercel configuration](vercel.json) for Next.js functions in Frankfurt. For a restricted preview:
 

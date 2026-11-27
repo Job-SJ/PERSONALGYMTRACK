@@ -4,7 +4,7 @@ import {localeCookie,resolveLocale} from '../lib/format';
 import {redirect} from 'next/navigation';
 import {revalidatePath} from 'next/cache';
 import {z} from 'zod';
-import {configured,db,publicRegistration,session} from '../lib/supabase';
+import {configured,config,db,publicRegistration,session} from '../lib/supabase';
 import {hevy,HevyError} from '../lib/hevy';
 import {runSync} from '../lib/sync';
 import {parseCsv} from '../lib/csv';
@@ -21,7 +21,16 @@ export async function login(form:FormData) {
   redirect('/app');
 }
 export async function logout() {
-  if (configured()) await (await db()).auth.signOut({scope:'local'});
+  const connection=config();
+  if(connection){
+    try{await (await db()).auth.signOut({scope:'local'});}
+    catch{/* Clear the browser session even when Auth is unreachable. */}
+    finally{
+      const jar=await cookies();
+      const key='sb-'+new URL(connection.url).hostname.split('.')[0]+'-auth-token';
+      for(const {name} of jar.getAll()) if(name===key||name.startsWith(key+'.')) jar.delete(name);
+    }
+  }
   redirect('/');
 }
 export async function register(form:FormData){
@@ -83,7 +92,7 @@ export async function sync(form:FormData) {
     const key=await credentials.read();
     if(!key) throw new HevyError('Connect Hevy before synchronizing.');
     if (form.get('mode')==='test') {
-      if(process.env.SUPABASE_SERVER_SECRET && !await credentials.reserveHevyCheck()) throw new HevyError('Wait 15 seconds before testing again.');
+      if(process.env.SUPABASE_SERVER_SECRET && !await credentials.reserveCheck()) throw new HevyError('Wait 15 seconds before testing again.');
       await hevy(key).test(AbortSignal.timeout(12000));
       status='Hevy connection verified.';
     } else {
@@ -108,7 +117,7 @@ export async function configureHevy(form:FormData) {
     }else{
       const key=z.string().trim().regex(/^[\x21-\x7e]{8,512}$/).safeParse(mode.data==='migrate' ? await credentials.read() : form.get('key'));
       if(!key.success) throw new HevyError('Enter a valid Hevy API key.');
-      if(!await credentials.reserveHevyCheck()) throw new HevyError('Wait 15 seconds before testing again.');
+      if(!await credentials.reserveCheck()) throw new HevyError('Wait 15 seconds before testing again.');
       await hevy(key.data).test(AbortSignal.timeout(12000));
       await credentials.save(key.data);
       status='Hevy connection verified and saved.';
