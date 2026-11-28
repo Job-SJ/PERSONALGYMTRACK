@@ -97,9 +97,9 @@ it('validates composed native tool calls and the structured fallback through the
     if(payload.tools) expect(payload.tools.map((tool:{function:{name:string}})=>tool.function.name)).toEqual(['analyze_fitness','prepare_meal','estimate_lift']);
     const bad=transport.mock.calls.length===3;
     const requested=bad?[{name:'analyze_fitness',arguments:{...operations[0].arguments,user_id:'another-account'}}]:operations;
-    return Response.json({model:selection.model,usage:{prompt_tokens:300,completion_tokens:40,cost:0},choices:[{message:{
+    return Response.json({model:selection.model,usage:{prompt_tokens:300,completion_tokens:40,cost:0},choices:[{finish_reason:payload.tools?'tool_calls':'stop',message:{
       role:'assistant',
-      ...(payload.tools?{tool_calls:requested.map(operation=>({type:'function',function:{name:operation.name,arguments:JSON.stringify(operation.arguments)}}))}:
+      ...(payload.tools?{tool_calls:requested.map((operation,index)=>({id:'call_'+index,type:'function',function:{name:operation.name,arguments:JSON.stringify(operation.arguments)}}))}:
         {content:JSON.stringify({operations:requested})}),
     }}]});
   });

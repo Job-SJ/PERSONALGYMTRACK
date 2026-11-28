@@ -230,10 +230,14 @@ export async function retrieveCoachEvidence(client:SupabaseClient,owner:string,p
   const results=await Promise.all(plans.map(execute));
   // Never truncate JSON inside an evidence item.
   const evidence:typeof results=[];
-  for(const result of results){
-    if(new TextEncoder().encode(JSON.stringify([...evidence,result])).length<=5200) evidence.push(result);
-  }
+  const toolResults=results.map(result=>{
+    if(new TextEncoder().encode(JSON.stringify([...evidence,result])).length>5200){
+      return {error:'The result exceeded the evidence limit. Ask for a narrower range.'};
+    }
+    evidence.push(result);
+    return result;
+  });
   deadline.throwIfAborted();
-  return {material:JSON.stringify({results:evidence,omitted:results.length-evidence.length}),references:results.length?{label:results.map(result=>
+  return {toolResults,material:JSON.stringify({results:evidence,omitted:results.length-evidence.length}),references:results.length?{label:results.map(result=>
     `${result.tool}: ${result.from??'recorded history'} – ${result.through}${'capped' in result&&result.capped?' (bounded sample)':''}`).join(' · '),dates:[]}:undefined};
 }

@@ -4,6 +4,7 @@ import {createServer} from 'node:http';
 export const fixturePort=Number(process.env.PGT_FIXTURE_PORT??(Number(process.env.PGT_PRIVATE_E2E_PORT??3141)-1));
 export const userOne='10000000-0000-4000-8000-000000000001';
 export const userTwo='20000000-0000-4000-8000-000000000002';
+export const budgetUser='70000000-0000-4000-8000-000000000007';
 const factorId='30000000-0000-4000-8000-000000000003';
 const secret='synthetic fixture signing material';
 const format=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'});
@@ -87,9 +88,9 @@ if(process.env.PGT_FIXTURE_LISTEN==='1'){
         if(table==='rpc'&&url.pathname.endsWith('/reserve_coach_request')){
           return send(200,body.cost_micros===0?'50000000-0000-4000-8000-000000000005':null);
         }
-        if(table==='coach_settings'&&(owner===userOne||owner===userTwo)) return send(200,[{
+        if(table==='coach_settings'&&(owner===userOne||owner===userTwo||owner===budgetUser)) return send(200,[{
           enabled:true,consent_at:created,chat_consent_at:created,credential_source:'instance',model:owner===userOne?'synthetic/free':'synthetic/fallback',
-          endpoint:'synthetic',prompt_price:0,completion_price:0,monthly_micros:0,revision:'60000000-0000-4000-8000-000000000006',
+          endpoint:'synthetic',prompt_price:owner===budgetUser?0.000002:0,completion_price:0,monthly_micros:0,revision:'60000000-0000-4000-8000-000000000006',
         }]);
         if(table==='coach_conversations'||table==='coach_turns'){
           const records=table==='coach_conversations'?coachConversations:coachTurns;
@@ -110,6 +111,7 @@ if(process.env.PGT_FIXTURE_LISTEN==='1'){
         return send(200,[]);
       }
       if(!claims||(claims.sub===userTwo&&claims.aal!=='aal2')) return send(403,{code:'42501',message:'Access denied'});
+      if(table==='body_measurements'&&filters.get('day')==='gte.2020-01-02') return send(503,{message:'Synthetic tool failure'});
       if(table==='nutrition_entries'&&request.method==='POST'&&filters.get('on_conflict')==='user_id,id'&&
         request.headers.prefer?.includes('resolution=ignore-duplicates')){
         if(!Array.isArray(body)||body.some(row=>row.user_id!==claims.sub)) return send(403,{code:'42501',message:'Access denied'});

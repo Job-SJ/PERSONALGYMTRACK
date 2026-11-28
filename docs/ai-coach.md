@@ -12,7 +12,7 @@ GymTrack checks the live OpenRouter Zero Data Retention catalog for compatible e
 
 OpenRouter account credits and key limits govern the provider account. Provider pricing is shown per million input and output tokens. GymTrack applies its own per-user cap, with a suggested **$2 USD per UTC month** for paid setup and a zero-dollar limit for free setup. GymTrack never purchases credits. An administrator who offers a shared instance key should set an aggregate OpenRouter cap as well.
 
-The database reserves the worst-case cost of planning and answering before a model-backed turn. It also applies a cooldown and a monthly request count limit. Unconfirmed or interrupted provider calls can retain their reservation. Provider credit shortages surface when OpenRouter returns them. The inference-key endpoint exposes key and guardrail limits and free-request quotas, while overall account credit availability can become known during inference. [OpenRouter key metadata](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-api-key)
+The database reserves the worst-case cost of planning and answering before a model-backed turn. Each turn gets at most two model calls and four operations. Coach returns native tool results with their call IDs, then validates the final response before displaying or saving it. A failed, timed-out, or incomplete response shows a retry message. The database also applies a cooldown and a monthly request count limit. Unconfirmed or interrupted provider calls can retain their reservation. Provider credit shortages surface when OpenRouter returns them. [OpenRouter key metadata](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-api-key)
 
 ## What Coach can analyze
 

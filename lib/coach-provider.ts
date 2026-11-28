@@ -36,12 +36,20 @@ export class CoachConnectionError extends CoachProviderError {
 }
 type Answer={text:string;promptTokens:number;completionTokens:number;costMicros:number};
 export type CoachMessage={role:'user'|'assistant';content:string};
+const nativeCall=z.object({id:z.string().min(1).max(128).regex(/^[a-zA-Z0-9_-]+$/),type:z.literal('function'),
+  function:z.object({name:z.string(),arguments:z.string().max(2000)})});
+type NativeCall=z.infer<typeof nativeCall>;
+type NativeContinuation={role:'assistant';content:null;tool_calls:NativeCall[]}|
+  {role:'tool';tool_call_id:string;content:string};
 export interface CoachProvider {
   test(signal?:AbortSignal):Promise<{paidLimitReached:boolean;freeLimitReached:boolean}>;
   models(signal?:AbortSignal):Promise<CoachDiscovery>;
   answer(selection:Selection,system:string,input:string,signal?:AbortSignal):Promise<Answer>;
   chat(selection:Selection,system:string,messages:CoachMessage[],signal:AbortSignal,onDelta?:(delta:string)=>void):Promise<Answer>;
-  plan(selection:Selection,system:string,messages:CoachMessage[],nativeTools:boolean,signal:AbortSignal):Promise<Answer & {plan:CoachPlan}>;
+  continueChat(selection:Selection,system:string,messages:CoachMessage[],calls:NativeCall[],results:unknown[],
+    signal:AbortSignal,onDelta?:(delta:string)=>void,disableTools?:boolean):Promise<Answer>;
+  plan(selection:Selection,system:string,messages:CoachMessage[],nativeTools:boolean,signal:AbortSignal):
+    Promise<Omit<Answer,'text'> & {plan:CoachPlan;calls:NativeCall[]}>;
 }
 
 const usageSchema=z.object({
@@ -66,10 +74,10 @@ const chunkSchema=z.object({
 function streamParser(model:string,onDelta:(delta:string)=>void){
   let text='';
   let modelSeen=false;
-  let finished=false;
+  let finishReason:'stop'|'length'|undefined;
   let done=false;
   let usage:z.infer<typeof usageSchema>|undefined;
-  const invalid=()=>new CoachProviderError('OpenRouter returned an invalid coaching stream.');
+  const invalid=()=>new CoachProviderError('OpenRouter returned an invalid coaching stream. Retry the message or choose a different model.');
   return {
     line(line:string){
       if(!line.startsWith('data:')) return;
@@ -86,24 +94,27 @@ function streamParser(model:string,onDelta:(delta:string)=>void){
       if(chunk.usage) usage=chunk.usage;
       const choice=chunk.choices[0];
       if(choice?.delta.content){
-        if(!modelSeen||finished) throw invalid();
+        if(!modelSeen||finishReason) throw invalid();
         text+=choice.delta.content;
         if(new TextEncoder().encode(text).length>6000) throw invalid();
         onDelta(choice.delta.content);
       }
-      if(choice?.finish_reason) finished=true;
+      if(choice?.finish_reason){
+        if(finishReason) throw invalid();
+        finishReason=choice.finish_reason;
+      }
     },
     result(){
-      if(!done||!finished||!modelSeen||!usage||!text.trim()) throw invalid();
-      return {model,choices:[{finish_reason:'stop',message:{role:'assistant',content:text}}],usage};
+      if(!done||!finishReason||!modelSeen||!usage||!text.trim()) throw invalid();
+      return {model,choices:[{finish_reason:finishReason,message:{role:'assistant',content:text}}],usage};
     },
   };
 }
 
 export function openRouter(key:string,transport=fetch,timeout=20_000):CoachProvider{
   async function request(path:string,limit:number,signal?:AbortSignal,body?:unknown,parser?:ReturnType<typeof streamParser>){
+    const timeoutSignal=AbortSignal.timeout(timeout);
     try {
-      const timeoutSignal=AbortSignal.timeout(timeout);
       const response=await transport('https://openrouter.ai/api/v1/'+path,{
         method:body?'POST':'GET',
         headers:{Authorization:'Bearer '+key,...(body?{'Content-Type':'application/json'}:{})},
@@ -144,23 +155,27 @@ export function openRouter(key:string,transport=fetch,timeout=20_000):CoachProvi
       }finally{await reader.cancel().catch(()=>undefined);reader.releaseLock();}
     }catch(error){
       if(error instanceof CoachProviderError) throw error;
-      throw new CoachProviderError(signal?.aborted?'Request cancelled.':'OpenRouter is unavailable or returned an invalid response.');
+      throw new CoachProviderError(signal?.aborted?'Request cancelled.':timeoutSignal.aborted?
+        'OpenRouter took too long. Retry the message or choose a faster model.':'OpenRouter is unavailable or returned an invalid response.');
     }
   }
   const routing=(selection:Selection)=>({only:[selection.endpoint],allow_fallbacks:false,require_parameters:true,
     data_collection:'deny',zdr:true,max_price:{prompt:selection.prompt*1_000_000,completion:selection.completion*1_000_000,request:0,image:0}});
-  async function complete(selection:Selection,system:string,messages:CoachMessage[],signal?:AbortSignal,onDelta?:(delta:string)=>void){
-    const input=[system,...messages.map(row=>row.content)].join('');
+  async function complete(selection:Selection,system:string,messages:(CoachMessage|NativeContinuation)[],signal?:AbortSignal,
+    onDelta?:(delta:string)=>void,disableTools=false){
+    const input=system+messages.map(row=>'tool_calls' in row?JSON.stringify(row):row.content).join('');
     if(new TextEncoder().encode(input).length>coachInputBytes) throw new CoachProviderError('The coaching summary is too large.');
     if(input.includes(key)) throw new CoachProviderError('Remove credentials from your message.');
     const raw=await request('chat/completions',128_000,signal,{
       model:selection.model,max_tokens:outputTokens,stream:Boolean(onDelta),
       messages:[{role:'system',content:system},...messages],
+      ...(disableTools?{tools:coachTools,tool_choice:'none'}:{}),
       provider:routing(selection),
     },onDelta?streamParser(selection.model,onDelta):undefined);
     const parsed=completionSchema.safeParse(raw);
-    if(!parsed.success||parsed.data.model!==selection.model) throw new CoachProviderError('OpenRouter returned an invalid coaching response.');
+    if(!parsed.success||parsed.data.model!==selection.model) throw new CoachProviderError('OpenRouter returned an invalid coaching response. Retry the message or choose a different model.');
     const {usage,choices}=parsed.data;
+    if(choices[0].finish_reason==='length') throw new CoachProviderError('The model ran out of room for its answer. Retry with a narrower question.');
     const text=choices[0].message.content;
     if(new TextEncoder().encode(text).length>6000) throw new CoachProviderError('OpenRouter returned an oversized coaching response.');
     return {text,promptTokens:usage.prompt_tokens,completionTokens:usage.completion_tokens,costMicros:Math.ceil(usage.cost*1_000_000)};
@@ -226,9 +241,22 @@ export function openRouter(key:string,transport=fetch,timeout=20_000):CoachProvi
       return complete(selection,system,[{role:'user',content:input}],signal);
     },
     chat:complete,
+    async continueChat(selection,system,messages,calls,results,signal,onDelta,disableTools){
+      const assistant={role:'assistant' as const,content:null,tool_calls:calls};
+      const budget=coachInputBytes-new TextEncoder().encode(system+JSON.stringify(assistant)+messages.map(row=>row.content).join('')).length;
+      const toolMessages=calls.map((call,index)=>({
+        role:'tool' as const,tool_call_id:call.id,content:JSON.stringify(results[index]??{error:'No usable result.'}),
+      }));
+      const size=(text:string)=>new TextEncoder().encode(text).length;
+      for(const row of [...toolMessages].sort((a,b)=>size(b.content)-size(a.content))){
+        if(toolMessages.reduce((total,message)=>total+size(message.content),0)<=budget) break;
+        row.content=JSON.stringify({error:'The result exceeded the response context limit. Ask for a narrower range.'});
+      }
+      return complete(selection,system,[...messages,assistant,...toolMessages],signal,onDelta,disableTools);
+    },
     async plan(selection,system,messages,nativeTools,signal){
       const instruction=nativeTools?
-        'Call the tools needed for the latest message. If none are needed, make no calls. Request up to four operations.' :
+        'This is planning only. Call the tools needed for the latest message, especially for questions about the athlete’s own records. If none are needed, make no calls. Request up to four operations together. Do not narrate the plan.' :
         'Return only JSON: {"operations":[{"name":"tool name","arguments":{}}]}. Use up to four operations, or an empty list if no tool is needed. Tool schemas: '+JSON.stringify(coachTools);
       const planningSystem=system+'\n'+instruction;
       const input=[planningSystem,...messages.map(row=>row.content)].join('');
@@ -240,24 +268,29 @@ export function openRouter(key:string,transport=fetch,timeout=20_000):CoachProvi
         messages:[{role:'system',content:planningSystem},...messages],
         ...(nativeTools?{tools:coachTools}:{}),
       });
-      const parsed=z.object({model:modelId,usage:usageSchema,choices:z.tuple([z.object({message:z.object({
+      const parsed=z.object({model:modelId,usage:usageSchema,choices:z.tuple([z.object({
+       finish_reason:z.enum(['stop','tool_calls','length']),message:z.object({
         role:z.literal('assistant'),content:z.string().max(6000).nullish(),
-        tool_calls:z.array(z.object({type:z.literal('function'),function:z.object({
-          name:z.string(),arguments:z.string().max(2000),
-        })})).max(4).optional(),
+        tool_calls:z.array(nativeCall).max(4).optional(),
       })})])}).safeParse(raw);
       const invalid=()=>new CoachProviderError('The selected model could not plan this request. Try again or choose a different model.');
       if(!parsed.success||parsed.data.model!==selection.model) throw invalid();
       const {usage,choices}=parsed.data;
       const {tool_calls,content}=choices[0].message;
+      const calls=tool_calls??[];
+      if(choices[0].finish_reason==='length') throw new CoachProviderError('The model could not finish planning. Retry with a narrower question.');
+      if((!nativeTools&&calls.length)||(choices[0].finish_reason==='tool_calls'&&!calls.length)||
+        new Set(calls.map(call=>call.id)).size!==calls.length) throw invalid();
       let plan;
       try{
-        const value=nativeTools?{operations:(tool_calls??[]).map(call=>({
+        const value=nativeTools?{operations:calls.map(call=>({
           name:call.function.name,arguments:JSON.parse(call.function.arguments),
         }))}:JSON.parse((content??'').trim().replace(/^```(?:json)?\s*|\s*```$/gi,''));
         plan=coachPlan.parse(value);
       }catch{throw invalid();}
-      return {text:content??'',plan,promptTokens:usage.prompt_tokens,completionTokens:usage.completion_tokens,
+      const validatedCalls=calls.map((call,index)=>({...call,function:{name:call.function.name,
+        arguments:JSON.stringify(plan.operations[index].arguments)}}));
+      return {calls:validatedCalls,plan,promptTokens:usage.prompt_tokens,completionTokens:usage.completion_tokens,
         costMicros:Math.ceil(usage.cost*1_000_000)};
     },
   };

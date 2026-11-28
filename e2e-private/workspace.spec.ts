@@ -1,6 +1,7 @@
 import {expect,test} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
-import {accessToken,userOne,userTwo} from './fixture.mjs';
+import {accessToken,budgetUser,userOne,userTwo} from './fixture.mjs';
+import {readChatResponse} from '../lib/coach-chat-client';
 
 test('native bearer authentication is isolated and checks authenticator assurance',async({request})=>{
   const noSession=await request.get('/api/mobile');
@@ -137,17 +138,70 @@ test('Coach plans a partner comparison and follows a colloquial date and nutriti
   expect(denied.status()).toBe(404);
 });
 
+test('Coach completes a streamed Dutch training review after a native tool preamble',async({request})=>{
+  const id=randomUUID();
+  const headers={Authorization:'Bearer '+accessToken(userOne)};
+  expect((await request.post('/api/coach',{headers,data:{action:'new-chat',id}})).ok()).toBe(true);
+  const response=await request.post('/api/coach',{headers,data:{action:'send',id,turn:randomUUID(),stream:true,
+    prompt:'Hoii wat zijn goede punten van mijn trainingen en wat slechte?'}});
+  const events=(await response.text()).trim().split('\n').map(line=>JSON.parse(line));
+  expect(events).toHaveLength(3);
+  expect(events.slice(0,2).map(event=>event.delta).join('')).toMatch(/12 trainingen.*12 directe borstsets/);
+  expect(events.at(-1).turn.answer).toMatch(/12 trainingen.*12 directe borstsets/);
+  expect(JSON.stringify(events)).not.toContain('Even je data checken');
+  const received:string[]=[];
+  const native=await readChatResponse(new Response(await response.text(),{headers:{'Content-Type':'application/x-ndjson'}}),delta=>received.push(delta));
+  expect(native.turn?.answer).toBe(received.join('').trim());
+  const history=await request.post('/api/coach',{headers,data:{action:'conversation',id}});
+  expect((await history.json()).turns).toEqual([events.at(-1).turn]);
+});
+
+test('Coach renders the verified answer and hides tool orchestration in the web chat',async({page})=>{
+  await page.goto('/login');
+  await page.getByLabel('Email').fill('one@example.invalid');
+  await page.getByLabel('Password').fill('synthetic-password');
+  await page.getByRole('button',{name:'Sign in'}).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await page.goto('/app/coach');
+  const input=page.getByRole('textbox',{name:'Message Coach'});
+  await input.fill('Hoii wat zijn goede punten van mijn trainingen en wat slechte?');
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  const answer=page.locator('.coach-markdown');
+  await expect(answer).toContainText('12 trainingen');
+  await expect(answer).toContainText('12 directe borstsets');
+  await expect(answer).not.toContainText('Even je data checken');
+});
+
+test('Coach returns actionable stream errors for failed tools, unfinished answers and exhausted budgets',async({request})=>{
+  for(const [owner,prompt,error] of [
+    [userOne,'How noisy is the dated scale sample?',/could not load.*retry/i],
+    [userOne,'Could you scan the big picture?',/stopped before answering.*retry/i],
+    [userOne,'What about recovery week structure?',/ran out of room.*narrower/i],
+    [budgetUser,'Which lifts should I focus on?',/monthly usage limit/i],
+  ] as const){
+    const id=randomUUID();
+    const headers={Authorization:'Bearer '+accessToken(owner)};
+    expect((await request.post('/api/coach',{headers,data:{action:'new-chat',id}})).ok()).toBe(true);
+    const response=await request.post('/api/coach',{headers,data:{action:'send',id,turn:randomUUID(),stream:true,prompt}});
+    const events=(await response.text()).trim().split('\n').map(line=>JSON.parse(line));
+    expect(events).toEqual([{error:expect.stringMatching(error)}]);
+    const history=await request.post('/api/coach',{headers,data:{action:'conversation',id}});
+    expect((await history.json()).turns.every((turn:{answer:string|null})=>turn.answer===null)).toBe(true);
+  }
+});
+
 test('Coach uses structured planning without native tools and acknowledges a missing weight trend',async({request})=>{
   const id=randomUUID();
   const headers={Authorization:'Bearer '+accessToken(userTwo,'aal2')};
   expect((await request.post('/api/coach',{headers,data:{action:'new-chat',id}})).ok()).toBe(true);
-  const response=await request.post('/api/coach',{headers,data:{action:'send',id,turn:randomUUID(),
+  const response=await request.post('/api/coach',{headers,data:{action:'send',id,turn:randomUUID(),stream:true,
     prompt:'Wat zegt die weegschaal eigenlijk, zit daar al beweging in?'}});
   expect(response.status()).toBe(200);
-  const {turn}=await response.json();
-  expect(turn.answer).toContain('61 kg');
-  expect(turn.answer).toMatch(/één meting.*geen trend/i);
-  expect(turn.evidence.label).toContain('bodyweight');
+  const {turn}=await readChatResponse(new Response(await response.text(),{headers:{'Content-Type':'application/x-ndjson'}}),()=>{});
+  expect(turn).toBeDefined();
+  expect(turn?.answer).toContain('61 kg');
+  expect(turn?.answer).toMatch(/één meting.*geen trend/i);
+  expect(turn?.evidence?.label).toContain('bodyweight');
 });
 
 test('Coach prepares and revises a meal in chat before any diary write',async({page,request})=>{

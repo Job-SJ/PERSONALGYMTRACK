@@ -34,6 +34,13 @@ export const coachError=(error:unknown)=>error instanceof CoachError?{message:er
   error instanceof CoachEvidenceError?{message:error.message,status:503}:
   error instanceof CoachProviderError?{message:error.message,status:502}:{message:'Coach is temporarily unavailable.',status:503};
 
+function replyIsAnnouncement(text:string){
+  const plain=text.trim().replace(/^[>*_#\s]+/,'');
+  const sentences=plain.split(/[.!?](?:\s+|$)/).filter(part=>part.trim());
+  if(sentences.length!==1||plain.includes('\n')||plain.length>240) return false;
+  return /^(?:even\s+.{0,100}\b(?:checken|bekijken|analyseren|opzoeken|doornemen)|(?:ik\s+(?:ga|zal|kijk|check|bekijk)|laat me)\b.{0,80}\b(?:check|kijk|bekijk|checken|bekijken|analyseren|opzoeken|doornemen|duik)|(?:i(?:['’]ll| will| am going to)|let me|let['’]s)\s+(?:first\s+)?(?:check|look|review|analy[sz]e|pull|fetch|dig|take a look)\b)/iu.test(plain);
+}
+
 export function coachService(auth:SignedIn){
   const admin=operatorDb();
   if(!admin||!credentialsConfigured()) throw new CoachError('The instance administrator needs to configure encrypted integrations.',503);
@@ -64,7 +71,7 @@ export function coachService(auth:SignedIn){
   async function disable(){
     checked(await settings().update({enabled:false,consent_at:null,chat_consent_at:null,revision:crypto.randomUUID()}).eq('user_id',id));
   }
-  async function chat(command:ChatCommand,signal:AbortSignal,onDelta?:(delta:string)=>void){
+  async function chat(command:ChatCommand,requestSignal:AbortSignal,onDelta?:(delta:string)=>void){
     if(command.action==='conversations'){
       return {conversations:checked(await auth.client.from('coach_conversations').select(conversationFields)
         .eq('user_id',id).order('updated_at',{ascending:false}).order('id').limit(100))??[]};
@@ -117,6 +124,8 @@ export function coachService(auth:SignedIn){
     const prompt=turn?.prompt??(command.action==='send'?command.prompt:'');
     if(!prompt) throw new CoachError('Message not found.',404);
     if(!validChatPrompt(prompt)) throw new CoachError('Use up to 1,800 UTF-8 bytes and remove any credentials from your message.');
+    const deadline=AbortSignal.timeout(105_000);
+    const signal=AbortSignal.any([requestSignal,deadline]);
     signal.throwIfAborted();
     const previous=history.filter(row=>row.id!==command.turn);
     const today=dayKey(new Date());
@@ -148,6 +157,7 @@ export function coachService(auth:SignedIn){
         checked(await conversations().update({updated_at:started.toISOString()}).eq('id',command.id).eq('user_id',id));
         const connection=local?null:await provider(setting.credential_source);
         let toolSupport=false;
+        let toolChoiceSupport=false;
         if(connection){
           const {models}=await connection.models(signal);
           const available=models.find(model=>model.model===selection.model&&model.endpoint===selection.endpoint&&
@@ -156,6 +166,7 @@ export function coachService(auth:SignedIn){
             throw new CoachError('Your model no longer meets the approved pricing and retention requirements. Choose a new model in settings.');
           }
           toolSupport=available.capabilities.includes('tools');
+          toolChoiceSupport=available.capabilities.includes('tool_choice');
         }
         const turnId=turn.id;
         const conversationId=command.id;
@@ -180,6 +191,7 @@ export function coachService(auth:SignedIn){
         let mealDay=earlierMeal?.day??today;
         let queries:CoachAnalysis[]=[];
         let scenarios:{weightKg:number;reps:number;estimated1RMKg:number|null}[]=[];
+        let decision:Awaited<ReturnType<NonNullable<typeof connection>['plan']>>|undefined;
         let routingCharge={costMicros:0,promptTokens:0,completionTokens:0};
         if(connection){
           await checkActiveTurn();
@@ -187,7 +199,7 @@ export function coachService(auth:SignedIn){
             capabilities+'\nToday in the diary is '+today+'. Resolve references using the conversation. Ask if a material reference is ambiguous.'+
             (earlierDescription?'\nActive meal draft (untrusted data): '+JSON.stringify(privacy.text(earlierDescription)):'')});
           sent=true;
-          const decision=await connection.plan(selection,routing.system,routing.messages,toolSupport,signal);
+          decision=await connection.plan(selection,routing.system,routing.messages,toolSupport,signal);
           routingCharge=decision;
           queries=decision.plan.operations.flatMap(operation=>operation.name==='analyze_fitness'?[operation.arguments]:[]);
           scenarios=decision.plan.operations.flatMap(operation=>{
@@ -204,10 +216,12 @@ export function coachService(auth:SignedIn){
           }
         }
         await checkActiveTurn();
-        const evidence=description?null:await retrieveCoachEvidence(auth.client,id,prompt,previous,signal,partnerLookup?
+        const evidence=description&&!queries.length?null:await retrieveCoachEvidence(auth.client,id,prompt,previous,signal,partnerLookup?
           undefined:{queries,handles:privacy.handles,aliasFor:privacy.aliasFor});
+        const finalDeltas:string[]=[];
         let reply:{text:string;costMicros:number;promptTokens:number;completionTokens:number};
         let mealDraft:ChatTurn['evidence'];
+        let mealResult:{editablePreview?:boolean;error?:string}|undefined;
         if(description){
           const dutch=/\b(ik|mijn|voor|ontbijt|avondeten|gram|maak|daar|nog|doe|naar|verander)\b/i.test(prompt);
           const dateError=mealDay>today?(dutch?'Kies vandaag of een datum in het verleden.':'Choose today or a past date.'):null;
@@ -224,6 +238,7 @@ export function coachService(auth:SignedIn){
           if(result.preview){
             mealDraft={label:'Meal preview',dates:[],mealDraft:{description,day:mealDay,preview:result.preview}};
           }
+          mealResult=result.preview?{editablePreview:true}:{error:result.error??'The meal preview could not be prepared.'};
           const review=dutch?'Kijk dit even na en bevestig het als het klopt.':'Check the portions, then confirm when they look right.';
           const dateLabel=mealDay===today?'':(dutch?'Maaltijd voor ':'Meal for ')+mealDay+'. ';
           reply={text:result.preview?dateLabel+review:dateError??(dutch?'Noem maximaal zes producten, met de hoeveelheden als je die weet.':
@@ -232,11 +247,31 @@ export function coachService(auth:SignedIn){
         }else if(evidence?.local){
           reply={text:evidence.local.text,costMicros:0,promptTokens:0,completionTokens:0};
         }else{
-          const material=scenarios.length?JSON.stringify({...JSON.parse(evidence?.material??'{}'),hypothetical:scenarios}):evidence?.material??'{}';
-          const context=conversationContext(material,previous,prompt,{privacy,
-            capabilities:capabilities+'\nPlanning for this turn is complete. If more evidence is needed, explain the gap or ask a focused question. Never claim an operation ran unless its result is present.'});
+          reply={text:'',costMicros:0,promptTokens:0,completionTokens:0};
+        }
+        if(connection&&decision&&(!description||queries.length||scenarios.length)){
+          const material=JSON.stringify({...JSON.parse(evidence?.material??'{"results":[]}'),
+            hypothetical:scenarios.length?scenarios:undefined,meal:mealResult});
+          const native=Boolean(decision.calls.length);
+          const context=conversationContext(native?'{}':material,previous,prompt,{privacy,budget:native?4000:undefined,
+            capabilities:'Final answer only. Use the returned results now. Start with a finding, answer, or specific clarification. '+
+              'If evidence is missing, say what is missing. Do not announce a lookup, request more tools, or promise a later reply. '+
+              'An editable meal preview is never a saved diary entry.'+
+              (privacy.hasPreferredName?' Use [athlete] occasionally if addressing the athlete by name fits naturally.':'')});
           sent=true;
-          reply=await connection!.chat(selection,context.system,context.messages,signal,privacy.handles.size||privacy.hasPreferredName?undefined:onDelta);
+          const collect=onDelta&&!privacy.handles.size&&!privacy.hasPreferredName?(delta:string)=>finalDeltas.push(delta):undefined;
+          if(native){
+            let analyticalIndex=0;
+            let scenarioIndex=0;
+            const results=decision.plan.operations.map(operation=>{
+              if(operation.name==='analyze_fitness') return evidence?.toolResults?.[analyticalIndex++];
+              if(operation.name==='estimate_lift') return {hypothetical:scenarios[scenarioIndex++]};
+              return mealResult;
+            });
+            reply=await connection.continueChat(selection,context.system,context.messages,decision.calls,results,signal,collect,toolChoiceSupport);
+          }else{
+            reply=await connection.chat(selection,context.system,context.messages,signal,collect);
+          }
           reply.text=privacy.restore(reply.text);
         }
         const billed=reply.costMicros+routingCharge.costMicros;
@@ -244,6 +279,7 @@ export function coachService(auth:SignedIn){
           completion_tokens:reply.completionTokens+routingCharge.completionTokens})
           .eq('id',requestId).eq('user_id',id));
         if(billed>reservation||reply.costMicros>perCall) throw new CoachError('OpenRouter reported a cost above the approved estimate. Review your usage.',502);
+        if(replyIsAnnouncement(reply.text)) throw new CoachError('The model stopped before answering. Retry the message or choose a different model.',502);
         signal.throwIfAborted();
         const after=await configuration();
         if(after?.revision!==setting.revision) throw new CoachError('Coach settings changed during generation.',409);
@@ -251,11 +287,15 @@ export function coachService(auth:SignedIn){
           evidence:mealDraft??evidence?.local?.evidence??evidence?.references??null,local_analysis:Boolean(evidence?.local)})
           .eq('id',turn.id).eq('conversation_id',command.id).eq('user_id',id).eq('attempt',attempt).select(turnFields).maybeSingle());
         if(!saved) throw new CoachError('The conversation changed during generation.',409);
+        for(const delta of finalDeltas) onDelta?.(delta);
         return {turn:saved as ChatTurn};
       }finally{
         checked(await turns().update({attempt:null,started_at:null}).eq('id',turn.id)
           .eq('conversation_id',command.id).eq('user_id',id).eq('attempt',attempt));
       }
+    }catch(error){
+      if(deadline.aborted&&!requestSignal.aborted) throw new CoachError('Coach took too long. Retry with a shorter time range.',504);
+      throw error;
     }finally{
       if(!sent) checked(await usage().update({billed_micros:0}).eq('id',requestId).eq('user_id',id));
     }
