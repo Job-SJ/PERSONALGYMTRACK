@@ -25,6 +25,8 @@ npm run build:verify
 
 Use a matching Expo Go version for password sign-in and browsing, or build a development client on a configured machine with `npm run android` or `npm run ios`. Use the development client for deep links and remote notifications. Bundle verification exports JavaScript and assets. Native signing, APK/IPA assembly and store submission use the platform toolchains.
 
+The **Coach** tab shares conversations and provider settings with the web app. The selected AI provider processes typed messages and recent conversation context after you grant consent. [Coach setup and privacy](ai-coach.md)
+
 ## Password recovery
 
 Add `personalgymtrack://auth/confirm` to the isolated Supabase project's redirect allowlist. Keep the existing browser recovery path by adding a branch to the Supabase Reset Password email template.

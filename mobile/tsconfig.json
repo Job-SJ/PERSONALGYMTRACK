@@ -3,7 +3,10 @@
   "compilerOptions": {
     "strict": true,
     "noEmit": true,
-    "paths": { "zod": ["./node_modules/zod"] }
+    "paths": {
+      "react": ["./node_modules/@types/react/index.d.ts"],
+      "zod": ["./node_modules/zod"]
+    }
   },
   "include": ["*.ts", "*.tsx"]
 }

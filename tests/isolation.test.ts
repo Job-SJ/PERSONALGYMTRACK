@@ -22,6 +22,7 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
     await sql.exec(await readFile(new URL('../supabase/migrations/202611270001_integration_credentials.sql',import.meta.url),'utf8'));
     await sql.exec(await readFile(new URL('../supabase/migrations/202611270002_coach.sql',import.meta.url),'utf8'));
     await sql.exec(await readFile(new URL('../supabase/migrations/202611270003_notifications.sql',import.meta.url),'utf8'));
+    await sql.exec(await readFile(new URL('../supabase/migrations/202611280001_coach_chat.sql',import.meta.url),'utf8'));
     const [tableCheck,policies,constraints,indexes,rpcCheck]=await sql.exec(await readFile(new URL('../supabase/tests/schema_check.sql',import.meta.url),'utf8'));
     expect(tableCheck.rows).toHaveLength(8);
     for(const table of tableCheck.rows) expect(table).toMatchObject({
@@ -40,7 +41,8 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
     for(const rpc of rpcCheck.rows) expect(rpc).toMatchObject({
       security_definer:false,anon_execute:false,authenticated_execute:true,
     });
-    await sql.exec(`insert into auth.users values ('${owner}');
+    const other='20000000-0000-0000-0000-000000000002';
+    await sql.exec(`insert into auth.users values ('${owner}'),('${other}');
       insert into auth.mfa_factors values ('${owner}','verified','totp');
       insert into public.body_measurements(user_id,day,kind,value) values ('${owner}','2025-01-01','weight',80);
       set role authenticated;`);
@@ -51,7 +53,6 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
     expect((await sql.query('select value from public.body_measurements')).rows).toEqual([]);
     await setAal('aal2');
     expect((await sql.query('select value::int from public.body_measurements')).rows).toEqual([{value:80}]);
-    const other='20000000-0000-0000-0000-000000000002';
     expect((await sql.query('select public.acquire_sync($1) as granted',[owner])).rows).toEqual([{granted:true}]);
     expect((await sql.query('select public.acquire_sync($1) as granted',[other])).rows).toEqual([{granted:false}]);
     expect((await sql.query("select public.finish_sync($1,now(),null) as finished",[other])).rows).toEqual([{finished:false}]);
@@ -82,6 +83,35 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
     await sql.query("update public.coach_usage set created_at=now()-interval '30 seconds' where user_id=$1",[owner]);
     expect((await spend(owner,other,11)).rows).toEqual([{id:null}]);
     expect((await spend(owner,other,10)).rows[0]).toEqual({id:expect.any(String)});
+    const putConversation=(user:string)=>sql.query('insert into public.coach_conversations(id,user_id) values ($1,$1)',[user]);
+    await putConversation(owner);
+    await putConversation(other);
+    const putTurn=(conversation:string,user:string,text:string)=>sql.query(
+      'insert into public.coach_turns(id,conversation_id,user_id,prompt) values (gen_random_uuid(),$1,$2,$3)',[conversation,user,text]);
+    await putTurn(owner,owner,'Synthetic owner message');
+    await putTurn(owner,owner,'Synthetic follow-up');
+    await putTurn(other,other,'Synthetic other message');
+    await expect(putTurn(other,owner,'Cross-account message')).rejects.toThrow(/foreign key/);
+    await expect(putTurn(owner,owner,'é'.repeat(901))).rejects.toThrow(/check constraint/);
+    await sql.exec('set role authenticated');
+    await setAal('aal1');
+    expect((await sql.query('select id from public.coach_conversations')).rows).toEqual([]);
+    expect((await sql.query('select prompt from public.coach_turns')).rows).toEqual([]);
+    await setAal('aal2');
+    expect((await sql.query('select id from public.coach_conversations')).rows).toEqual([{id:owner}]);
+    expect((await sql.query('select prompt from public.coach_turns order by prompt')).rows)
+      .toEqual([{prompt:'Synthetic follow-up'},{prompt:'Synthetic owner message'}]);
+    await expect(sql.query("update public.coach_conversations set title='Changed'")).rejects.toThrow(/permission denied/);
+    await expect(sql.query('select attempt from public.coach_turns')).rejects.toThrow(/permission denied/);
+    await sql.exec('set role anon');
+    await expect(sql.query('select id from public.coach_conversations')).rejects.toThrow(/permission denied/);
+    await sql.exec('set role service_role');
+    await sql.query("update public.coach_turns set attempt=gen_random_uuid(),started_at=now() where prompt='Synthetic owner message'");
+    await expect(sql.query("update public.coach_turns set attempt=gen_random_uuid(),started_at=now() where prompt='Synthetic follow-up'"))
+      .rejects.toThrow(/coach_turns_one_generation/);
+    await sql.query('delete from public.coach_conversations where id=$1 and user_id=$1',[owner]);
+    expect((await sql.query('select prompt from public.coach_turns')).rows).toEqual([{prompt:'Synthetic other message'}]);
+    expect((await sql.query('select count(*)::int as count from public.coach_usage where user_id=$1',[owner])).rows).toEqual([{count:2}]);
     await sql.query("insert into public.notification_preferences(user_id,timezone,reminder_time,quiet_start,quiet_end,categories) values ($1,'Europe/Amsterdam','19:00','22:00','08:00',array['weekly'])",[owner]);
     expect((await sql.query('select user_id from public.claim_notification_accounts(10)')).rows).toEqual([{user_id:owner}]);
     expect((await sql.query('select user_id from public.claim_notification_accounts(10)')).rows).toEqual([]);

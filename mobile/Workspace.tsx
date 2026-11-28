@@ -4,8 +4,8 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import type {Session} from '@supabase/supabase-js';
 import * as Notifications from 'expo-notifications';
 import * as SecureStore from 'expo-secure-store';
-import type {FoodResults,MobileCoach,MobileOverview,MobileTab} from '../lib/mobile-contract';
-import {topics,type Topic} from '../lib/coach-topics';
+import type {FoodResults,MobileOverview,MobileTab} from '../lib/mobile-contract';
+import {MobileCoach} from './Coach';
 import {sumPortions,type Food,type Meal,meals} from '../lib/nutrition';
 import {categories,type Category} from '../lib/notification-rules';
 import {appUrl,mobileRequest,supabase} from './session';
@@ -47,7 +47,6 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
   const scheme=useColorScheme();
   const [tab,setTab]=useState<MobileTab>('Today');
   const [data,setData]=useState<MobileOverview>();
-  const [coach,setCoach]=useState<MobileCoach>();
   const [inbox,setInbox]=useState<Inbox>();
   const [error,setError]=useState('');
   const [note,setNote]=useState('');
@@ -77,15 +76,11 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
     return ()=>handler.remove();
   },[]);
   useEffect(()=>{
-    if(tab!=='Coach'&&tab!=='Settings') return;
+    if(tab!=='Settings') return;
     const controller=new AbortController();
-    if(tab==='Coach') void mobileRequest<MobileCoach>(session,'/api/coach',undefined,controller.signal).then(setCoach)
+    void mobileRequest<Inbox>(session,'/api/notifications',undefined,controller.signal).then(setInbox)
       .catch(error=>{if(!controller.signal.aborted)setError(error.message);});
-    else{
-      void mobileRequest<Inbox>(session,'/api/notifications',undefined,controller.signal).then(setInbox)
-        .catch(error=>{if(!controller.signal.aborted)setError(error.message);});
-      void SecureStore.getItemAsync(registrationKey).then(token=>{if(!controller.signal.aborted)setPushing(Boolean(token));}).catch(()=>undefined);
-    }
+    void SecureStore.getItemAsync(registrationKey).then(token=>{if(!controller.signal.aborted)setPushing(Boolean(token));}).catch(()=>undefined);
     return ()=>controller.abort();
   },[tab,session]);
   async function run(fn:(signal:AbortSignal)=>Promise<void>,done=''){
@@ -103,12 +98,6 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
     await refresh(signal);
   },done);
   const openWeb=(path:string)=>void Linking.openURL(appUrl+path).catch(()=>setError('Open the workspace in your browser.'));
-  function askCoach(topic:Topic){
-    void run(async signal=>{
-      const reply=await mobileRequest<MobileCoach['history'][number]>(session,'/api/coach',{action:'ask',topic},signal);
-      setCoach(current=>current&&({...current,history:[reply,...current.history.filter(row=>row.id!==reply.id)].slice(0,20)}));
-    });
-  }
   const macros=sumPortions(data?.entries.map(row=>row.portion)??[]);
   return <SafeAreaView style={[ui.safe,{backgroundColor:p.bg}]}>
     <StatusBar barStyle={p.bg==='#f4f5ef'?'dark-content':'light-content'}/>
@@ -116,12 +105,12 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
       <Text style={{color:p.accent,fontWeight:'700'}}>PERSONALGYMTRACK</Text>
       <Button text={tab==='Settings'?'Refresh':'Settings'} p={p} disabled={busy} action={()=>tab==='Settings'?void run(refresh):setTab('Settings')}/>
     </View>
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={ui.content}>
-      <Text style={[ui.title,text]}>{tab==='Coach'?'Your coach. Your journey.':tab}</Text>
+    {tab==='Coach'?<MobileCoach session={session} p={p}/>:<ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={ui.content}>
+      <Text style={[ui.title,text]}>{tab}</Text>
       {error&&<Text accessibilityLiveRegion="polite" style={[ui.text,text]}>{error}</Text>}
       {note&&<Text accessibilityLiveRegion="polite" style={[ui.text,text]}>{note}</Text>}
       {busy&&<Line p={p}>Working…</Line>}
-      {!data&&tab!=='Coach'&&tab!=='Settings'&&<Line p={p}>Connecting to your workspace…</Line>}
+      {!data&&tab!=='Settings'&&<Line p={p}>Connecting to your workspace…</Line>}
       {tab==='Today'&&data&&<>
         <Panel title="Daily Intelligence" p={p}><Line p={p}>{data.summary}</Line>
           {data.headlines.map(row=><Line p={p} key={row.label}>{row.label} · {row.value}</Line>)}</Panel>
@@ -173,14 +162,6 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
           {data.weight.slice(0,10).map(row=><Line p={p} key={row.day}>{row.day} · {row.value} kg</Line>)}
         </Panel>
       </>}
-      {tab==='Coach'&&<>
-        <Panel title="Review your records" p={p}>{coach?.setting?.enabled?
-          (Object.entries(topics) as [Topic,string][]).map(([topic,label])=><Button p={p} key={topic} text={label} disabled={busy} action={()=>askCoach(topic)}/>):
-          <Button p={p} text="Open Coach setup on the web" action={()=>openWeb('/app/coach')}/>}
-          {busy&&<Button p={p} text="Cancel request" action={()=>running?.abort()}/>}
-        </Panel>
-        {coach?.history.map(row=><Panel key={row.id} title={topics[row.topic]} p={p}><Line p={p}>{row.answer}</Line></Panel>)}
-      </>}
       {tab==='Settings'&&<>
         <Panel title="Appearance" p={p}><View style={ui.row}>{(['dark','light','oled'] as const).map(theme=>
           <Button p={p} text={theme==='oled'?'OLED':theme} key={theme} accent={theme===data?.theme} disabled={busy}
@@ -227,7 +208,7 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
           </View>)}
         </Panel>
       </>}
-    </ScrollView>
+    </ScrollView>}
     <View accessibilityRole="tablist" style={[style.tabs,{borderColor:p.line,backgroundColor:p.panel}]}>
       {tabs.filter(value=>value!=='Settings').map(value=><Pressable key={value} accessibilityRole="tab" accessibilityState={{selected:tab===value}}
         style={style.tab} onPress={()=>{setError('');setNote('');setTab(value);}}>
