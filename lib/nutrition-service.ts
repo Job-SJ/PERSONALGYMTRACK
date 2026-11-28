@@ -2,7 +2,7 @@ import 'server-only';
 import {z} from 'zod';
 import {createHash} from 'node:crypto';
 import type {SupabaseClient} from '@supabase/supabase-js';
-import {mealSchema,portionSchema,targetSchema} from './nutrition';
+import {mealSchema,portionSchema,targetSchema,type Food} from './nutrition';
 import {matchMealLine,maxMealItems,parseMealText} from './meal-preview';
 import {dayKey} from './analytics';
 import {dutchMarketFirst,foodSearchUrl,fromOpenFoodFacts,type SearchMode} from './open-food-facts';
@@ -68,11 +68,14 @@ export async function writeNutrition(client:SupabaseClient,user_id:string,input:
   return {ok:true};
 }
 
-export async function previewMeal(input:string){
+export async function previewMeal(input:string,savedFoods:Food[]=[]){
   try{
     const {meal,lines}=parseMealText(input);
     const lookups=new Map<string,ReturnType<typeof lookupFoods>>();
     const matched=await Promise.all(lines.map(async line=>{
+      const saved=matchMealLine(line,savedFoods.filter(food=>food.name.toLowerCase()===line.query.toLowerCase()||food.code===line.query));
+      if(saved.foods.length) return saved;
+      if(!/^[\p{L}\p{M}\p{N} &'().,+%/-]+$/u.test(line.query)) return matchMealLine(line,[],true);
       const key=line.query.toLowerCase();
       let lookup=lookups.get(key);
       if(!lookup){

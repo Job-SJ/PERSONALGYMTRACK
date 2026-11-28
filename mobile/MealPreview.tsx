@@ -8,9 +8,13 @@ import {meals,unitsFor} from '../lib/nutrition';
 import {mobileRequest} from './session';
 import {Button,ui,type Palette} from './ui';
 
-export function MobileMealPreview({day,p,session,refresh,initialText,close}:{day:string;p:Palette;session:Session;refresh:()=>void;initialText?:string;close?:()=>void}){
+export function MobileMealPreview({day,p,session,refresh,initialText,initialPreview,requestId,disabled,onSaved,onDraftChange,onConfirmationLock,close}:{
+  day:string;p:Palette;session:Session;refresh:()=>void;initialText?:string;initialPreview?:MealPreview;requestId?:string;
+  disabled?:boolean;onSaved?:()=>void;close?:()=>void;
+  onDraftChange?:(description:string)=>void;onConfirmationLock?:(locked:boolean)=>void;
+}){
   const [choosing,setChoosing]=useState<number>();
-  const draft=useMealPreview({day,initialText,randomId:uuid.v4,
+  const draft=useMealPreview({day,initialText,initialPreview,onSaved,onDraftChange,onConfirmationLock,randomId:()=>requestId??uuid.v4(),
     async preview(text){
       const result=await mobileRequest<{preview:MealPreview}>(session,'/api/mobile',{action:'meal-preview',text});
       return result.preview;
@@ -20,7 +24,7 @@ export function MobileMealPreview({day,p,session,refresh,initialText,close}:{day
       refresh();
     },
   });
-  const locked=Boolean(draft.state)||draft.retry;
+  const locked=disabled||Boolean(draft.state)||draft.retry;
   const input=[ui.input,{color:p.text,borderColor:p.line}];
   const caption=[ui.text,{color:p.muted}];
   return <View style={[ui.panel,{backgroundColor:p.panel,borderColor:p.line}]}>
@@ -48,7 +52,7 @@ export function MobileMealPreview({day,p,session,refresh,initialText,close}:{day
         </View>
       </View>)}
       {draft.canConfirm&&<Text style={caption}>{mealPreviewTotals(draft.portions)}</Text>}
-      <Button p={p} accent disabled={Boolean(draft.state)||!draft.canConfirm} text={draft.state==='save'?'Saving…':draft.retry?'Retry confirmation':'Confirm meal'} action={draft.confirm}/>
+      <Button p={p} accent disabled={disabled||Boolean(draft.state)||!draft.canConfirm} text={draft.state==='save'?'Saving…':draft.retry?'Retry confirmation':'Confirm meal'} action={draft.confirm}/>
     </>}
     {draft.message&&<Text style={caption} accessibilityLiveRegion="polite">{draft.message}</Text>}
     {close&&<Button p={p} text="Back to chat" disabled={Boolean(draft.state)||draft.retry} action={close}/>}

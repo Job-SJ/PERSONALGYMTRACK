@@ -1,5 +1,5 @@
-﻿import {useRef,useState} from 'react';
-import {customMealFood,defaultMeal,type ConfirmMeal,type MatchedLine,type MealPreview} from './meal-preview';
+import {useEffect,useRef,useState} from 'react';
+import {customMealFood,defaultMeal,maxMealText,type ConfirmMeal,type MatchedLine,type MealPreview} from './meal-preview';
 import {portionSchema,unitsFor,type Food,type Meal,type Portion} from './nutrition';
 
 type Row={line:MatchedLine;food?:Food;amount:string;unit:Portion['unit']};
@@ -9,18 +9,34 @@ function choose(row:Row,food:Food):Row {
 }
 type Options={
   day:string;meal?:Meal;randomId:()=>string;initialText?:string;
+  initialPreview?:MealPreview;
+  onSaved?:()=>void;
+  onDraftChange?:(description:string)=>void;
+  onConfirmationLock?:(locked:boolean)=>void;
   preview:(input:string)=>Promise<MealPreview>;
   save:(input:ConfirmMeal)=>Promise<void>;
 };
-export function useMealPreview({day,meal:initialMeal=defaultMeal,randomId,preview,save,initialText=''}:Options){
+function previewRows(preview:MealPreview){
+  return preview.lines.map(line=>{
+    const row:Row={line,amount:line.amount===null?'':String(line.amount),unit:line.unit??'serving'};
+    return line.selected===null?row:choose(row,line.foods[line.selected]);
+  });
+}
+
+export function useMealPreview({day,meal:initialMeal=defaultMeal,randomId,preview,save,initialText='',initialPreview,onSaved,onDraftChange,onConfirmationLock}:Options){
   const [text,setText]=useState(initialText);
-  const [meal,setMeal]=useState(initialMeal);
-  const [rows,setRows]=useState<Row[]>([]);
+  const [meal,setMeal]=useState(initialPreview?.meal??initialMeal);
+  const [rows,setRows]=useState<Row[]>(()=>initialPreview?previewRows(initialPreview):[]);
   const [state,setState]=useState<'preview'|'save'>();
   const [message,setMessage]=useState('');
   const active=useRef(false);
   const pending=useRef<ConfirmMeal|null>(null);
   const [retry,setRetry]=useState(false);
+  useEffect(()=>{
+    const description=rows.length?meal+': '+rows.map(row=>[row.amount.trim()?row.amount.trim()+' '+row.unit:'',
+      row.food?.name??row.line.query].filter(Boolean).join(' ')).join(', '):text;
+    onDraftChange?.(description.length<=maxMealText?description:'');
+  },[meal,rows,text,onDraftChange]);
   const portions=rows.map(row=>portionSchema.safeParse({food:row.food,amount:Number(row.amount.replace(',','.')),unit:row.unit}));
   const canConfirm=rows.length>0&&portions.every(portion=>portion.success);
   async function run(kind:'preview'|'save',fn:()=>Promise<void>){
@@ -35,10 +51,7 @@ export function useMealPreview({day,meal:initialMeal=defaultMeal,randomId,previe
     void run('preview',async()=>{
       const next=await preview(text);
       setMeal(next.meal??initialMeal);
-      setRows(next.lines.map(line=>{
-        const row:Row={line,amount:line.amount===null?'':String(line.amount),unit:line.unit??'serving'};
-        return line.selected===null?row:choose(row,line.foods[line.selected]);
-      }));
+      setRows(previewRows(next));
     });
   }
   function confirm(){
@@ -48,9 +61,12 @@ export function useMealPreview({day,meal:initialMeal=defaultMeal,randomId,previe
         portions:portions.flatMap(portion=>portion.success?[portion.data]:[])};
       pending.current=command;
       setRetry(true);
+      onConfirmationLock?.(true);
       await save(command);
       pending.current=null;
       setRetry(false);setRows([]);setText('');setMessage('Meal logged.');
+      onSaved?.();
+      onConfirmationLock?.(false);
     });
   }
   function edit(index:number,change:(row:Row)=>Row){

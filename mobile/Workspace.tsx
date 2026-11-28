@@ -105,7 +105,7 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
       <Text style={{color:p.accent,fontWeight:'700'}}>PERSONALGYMTRACK</Text>
       <Button text={tab==='Settings'?'Refresh':'Settings'} p={p} disabled={busy} action={()=>tab==='Settings'?void run(refresh):setTab('Settings')}/>
     </View>
-    {tab==='Coach'?<MobileCoach session={session} p={p} today={data?.today} refreshDiary={()=>void run(refresh)}/>:<ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={ui.content}>
+    {tab==='Coach'?<MobileCoach session={session} p={p} refreshDiary={()=>void run(refresh)}/>:<ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={ui.content}>
       <Text style={[ui.title,text]}>{tab}</Text>
       {error&&<Text accessibilityLiveRegion="polite" style={[ui.text,text]}>{error}</Text>}
       {note&&<Text accessibilityLiveRegion="polite" style={[ui.text,text]}>{note}</Text>}

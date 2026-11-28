@@ -3,12 +3,13 @@ import {dayKey, estimate, loaded, muscleTotals, relativeStrength, shiftDay, sum,
 import {discoverPartners, taggedUsernames, type PartnerWorkout} from './coach-partners';
 import type {Measurement, Template, Workout} from './model';
 
-export const analyticalQuery=z.object({
+export const analyticalQueryFields=z.object({
   tool:z.enum(['training','strength','muscles','partners','nutrition','bodyweight','goals','workouts','notes']),
   from:z.iso.date().nullable(),
   through:z.iso.date(),
   compare:z.boolean().default(false),
-}).strict().refine(query=>query.from===null||query.from<=query.through);
+}).strict();
+export const analyticalQuery=analyticalQueryFields.refine(query=>query.from===null||query.from<=query.through);
 export type AnalyticalQuery=z.infer<typeof analyticalQuery>;
 type Tool=AnalyticalQuery['tool'];
 
@@ -133,7 +134,21 @@ function liftLabel(title:string,index:number){
   const equipment=title.match(/\b(barbell|dumbbell|machine|cable|smith)\b/i)?.[0].toLowerCase();
   return `${lift}${equipment?` (${equipment})`:''} ${index}`;
 }
-export function strengthEvidence(workouts:Workout[],templates:Map<string,Template>,current:string,weights:Measurement[]=[],previous=''){
+export function exerciseMatches(title:string,query:string){
+  const words=(text:string)=>text.normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}]+/gu)??[];
+  const actual=words(title);
+  return words(query).every(word=>actual.some(candidate=>{
+    if(candidate===word) return true;
+    if(word.length<4||Math.abs(candidate.length-word.length)>1) return false;
+    let index=0;
+    while(index<Math.min(word.length,candidate.length)&&word[index]===candidate[index]) index++;
+    return word.length===candidate.length?
+      word.slice(index+1)===candidate.slice(index+1)||
+        word[index]===candidate[index+1]&&word[index+1]===candidate[index]&&word.slice(index+2)===candidate.slice(index+2):
+      (word.length>candidate.length?word.slice(index+1)===candidate.slice(index):word.slice(index)===candidate.slice(index+1));
+  }))&&words(query).length>0;
+}
+export function strengthEvidence(workouts:Workout[],templates:Map<string,Template>,current:string,weights:Measurement[]=[],previous='',filter?:{exercise?:string;reps?:number;cohort?:Set<string>}){
   const prior=followUpPattern.test(current)?previous:'';
   const focus=[current,prior].map(text=>text.match(liftPattern)?.[1].toLowerCase().replace(/^bench$/,'bench press')).find(Boolean);
   const phrase=(value:string)=>' '+value.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim()+' ';
@@ -142,41 +157,50 @@ export function strengthEvidence(workouts:Workout[],templates:Map<string,Templat
   const exact=[...templates.values()].filter(template=>template.title.trim().length>=4&&currentPhrase.includes(phrase(template.title)));
   const inherited=prior&&!liftPattern.test(current)?
     [...templates.values()].filter(template=>template.title.trim().length>=4&&priorPhrase.includes(phrase(template.title))):[];
-  const focused=exact.length?exact:inherited;
+  const requested=filter?.exercise;
+  const focused=requested?[...templates.values()].filter(template=>exerciseMatches(template.title,requested)):exact.length?exact:inherited;
   const selected=new Set(focused.map(template=>template.id));
   const groups=new Map<string,Map<string,{day:string;kg:number;minutes:number;maxWeight:number;relative:number|null}>>();
   for(const workout of workouts) for(const exercise of workout.workout_exercises){
     const template=templates.get(exercise.template_id);
-    if(!loaded(template)||(selected.size?!selected.has(exercise.template_id):focus&&!template?.title.toLowerCase().includes(focus))) continue;
-    const sets=exercise.workout_sets.filter(working);
+    if(!loaded(template)||(requested||selected.size?!selected.has(exercise.template_id):focus&&!template?.title.toLowerCase().includes(focus))) continue;
+    const sets=exercise.workout_sets.filter(set=>working(set)&&(!filter?.reps||set.reps===filter.reps));
     const kg=Math.max(0,...sets.map(set=>estimate(set.weight_kg??0,set.reps??0)??0));
-    if(!kg) continue;
+    const heaviest=Math.max(0,...sets.map(set=>set.weight_kg??0));
+    if(!kg&&(!filter?.reps||!heaviest)) continue;
     const sessions=groups.get(exercise.template_id)??new Map();
     const existing=sessions.get(workout.id);
-    const maxWeight=Math.max(existing?.maxWeight??0,...sets.map(set=>set.weight_kg??0));
-    if(kg>(existing?.kg??0)) sessions.set(workout.id,{day:dayKey(workout.started_at),kg,
+    const maxWeight=Math.max(existing?.maxWeight??0,heaviest);
+    if(!existing||kg>existing.kg) sessions.set(workout.id,{day:dayKey(workout.started_at),kg,
       minutes:(Date.parse(workout.ended_at)-Date.parse(workout.started_at))/60000,maxWeight,
-      relative:weights.length?relativeStrength(kg,workout.started_at,weights):null});
+      relative:weights.length&&kg?relativeStrength(kg,workout.started_at,weights):null});
     else if(existing) existing.maxWeight=maxWeight;
     groups.set(exercise.template_id,sessions);
   }
   const results=[...groups].map(([id,sessions],index)=>{
     const title=templates.get(id)!.title;
     const rows=[...sessions.values()].sort((a,b)=>a.day.localeCompare(b.day));
-    const sample=Math.min(3,Math.floor(rows.length/2));
-    const first=sample?sum(rows.slice(0,sample).map(row=>row.kg))/sample:null;
-    const last=sample?sum(rows.slice(-sample).map(row=>row.kg))/sample:null;
-    const timed=rows.filter(row=>row.minutes>0).sort((a,b)=>a.minutes-b.minutes);
+    const estimated=rows.filter(row=>row.kg>0);
+    const sample=Math.min(3,Math.floor(estimated.length/2));
+    const first=sample?sum(estimated.slice(0,sample).map(row=>row.kg))/sample:null;
+    const last=sample?sum(estimated.slice(-sample).map(row=>row.kg))/sample:null;
+    const timed=estimated.filter(row=>row.minutes>0).sort((a,b)=>a.minutes-b.minutes);
     const middle=Math.floor(timed.length/2);
     const relative=rows.flatMap(row=>row.relative===null?[]:[row.relative]);
     const split=middle>=2&&timed[middle-1].minutes<timed[middle].minutes?{
       shorter:{sessions:middle,meanEstimated1RMKg:average(timed.slice(0,middle).map(row=>row.kg))},
       longer:{sessions:timed.length-middle,meanEstimated1RMKg:average(timed.slice(middle).map(row=>row.kg))},
     }:null;
+    const summarize=(sample:typeof rows)=>({sessions:sample.length,meanSessionBestEstimated1RMKg:average(sample.map(row=>row.kg).filter(kg=>kg>0)),
+      meanSessionHeaviestKg:average(sample.map(row=>row.maxWeight))});
+    const cohort=filter?.cohort;
+    const paired=cohort?[...sessions].filter(([id])=>cohort.has(id)).map(([,row])=>row):[];
+    const others=cohort?[...sessions].filter(([id])=>!cohort.has(id)).map(([,row])=>row):[];
     return {exercise:liftLabel(title,index+1),sessions:rows.length,firstDay:rows[0].day,lastDay:rows.at(-1)!.day,
+      reps:filter?.reps,partnerComparison:cohort?{tagged:summarize(paired),other:summarize(others)}:undefined,
       earlyMeanEstimated1RMKg:first===null?null:round(first),recentMeanEstimated1RMKg:last===null?null:round(last),sessionsPerMean:sample,
       changePercent:first&&last!==null?round((last-first)/first*100):null,
-      bestEstimated1RMKg:round(Math.max(...rows.map(row=>row.kg))),maxLoggedWeightKg:Math.max(...rows.map(row=>row.maxWeight)),
+      bestEstimated1RMKg:estimated.length?round(Math.max(...estimated.map(row=>row.kg))):null,maxLoggedWeightKg:Math.max(...rows.map(row=>row.maxWeight)),
       durationAssociation:split,relativeStrength:relative.length?{samples:relative.length,meanEstimated1RMToBodyweight:
         Math.round(sum(relative)/relative.length*100)/100}:undefined};
   });

@@ -3,14 +3,17 @@ import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import type {apiSession} from './api-session';
 import {coachInstructions} from './coach-context';
-import {conversationContext,scrubCoachText,validChatPrompt,type ChatCommand,type ChatTurn} from './coach-chat';
-import {needsCoachRouting,planCoachAnalysis,selectableTools} from './coach-analysis';
-import {dayKey} from './analytics';
+import {coachPrivacy,conversationContext,validChatPrompt,type ChatCommand,type ChatTurn} from './coach-chat';
+import {coachCapabilities,type CoachAnalysis} from './coach-tools';
+import {dayKey,estimate} from './analytics';
 import type {Topic} from './coach-topics';
 import {loadCoachingContext} from './coach-data';
-import {PartnerHistoryError,retrieveCoachEvidence} from './coach-retrieval';
-import {CoachConnectionError,CoachProviderError,isFree,openRouter,reserveMicros,selectionSchema} from './coach-provider';
+import {CoachEvidenceError,retrieveCoachEvidence} from './coach-retrieval';
+import {CoachConnectionError,CoachProviderError,isFree,openRouter,reserveChatMicros,reserveMicros,selectionSchema} from './coach-provider';
 import {credentialsConfigured,integrationCredentials,operatorDb} from './integration-credentials';
+import {isMealLogMessage,parseMealText} from './meal-preview';
+import {portionSchema} from './nutrition';
+import {previewMeal} from './nutrition-service';
 
 type SignedIn=NonNullable<Awaited<ReturnType<typeof apiSession>>['session']>;
 const credentialSource=z.enum(['personal','instance']);
@@ -28,7 +31,7 @@ export class CoachError extends Error {
   constructor(message:string,readonly status=400){super(message);}
 }
 export const coachError=(error:unknown)=>error instanceof CoachError?{message:error.message,status:error.status}:
-  error instanceof PartnerHistoryError?{message:error.message,status:503}:
+  error instanceof CoachEvidenceError?{message:error.message,status:503}:
   error instanceof CoachProviderError?{message:error.message,status:502}:{message:'Coach is temporarily unavailable.',status:503};
 
 export function coachService(auth:SignedIn){
@@ -116,11 +119,12 @@ export function coachService(auth:SignedIn){
     if(!validChatPrompt(prompt)) throw new CoachError('Use up to 1,800 UTF-8 bytes and remove any credentials from your message.');
     signal.throwIfAborted();
     const previous=history.filter(row=>row.id!==command.turn);
-    const previousPrompt=previous.find(row=>row.answer)?.prompt??'';
-    const local=planCoachAnalysis(prompt,previousPrompt,dayKey(new Date()))[0]?.tool==='partners';
-    const route=needsCoachRouting(prompt,previousPrompt);
+    const today=dayKey(new Date());
+    const partnerLookup=/^(?:who (?:do|did) i (?:usually |normally |last )?train with|met wie train ik(?: meestal)?)[?.!]*$/i.test(prompt);
+    const mealDescription=isMealLogMessage(prompt)&&!/[?]|\b(?:yesterday|gisteren|tomorrow|morgen|compare|vergelijk|\d{4}-\d{2}-\d{2})\b/i.test(prompt)?prompt:null;
+    const local=partnerLookup||Boolean(mealDescription);
     const perCall=reserveMicros(selection);
-    const reservation=local?0:perCall*(route?2:1);
+    const reservation=local?0:reserveChatMicros(selection);
     const requestId=checked(await client.rpc('reserve_coach_request',{owner_id:id,settings_revision:setting.revision,cost_micros:reservation}));
     if(!requestId) throw new CoachError('Coach is cooling down or has reached the monthly usage limit.',429);
     let sent=false;
@@ -151,7 +155,7 @@ export function coachService(auth:SignedIn){
           if(!available){
             throw new CoachError('Your model no longer meets the approved pricing and retention requirements. Choose a new model in settings.');
           }
-          toolSupport=available.capabilities.includes('tools')&&available.capabilities.includes('tool_choice');
+          toolSupport=available.capabilities.includes('tools');
         }
         const turnId=turn.id;
         const conversationId=command.id;
@@ -164,33 +168,76 @@ export function coachService(auth:SignedIn){
           if(!checked(active)) throw new CoachError('The conversation was deleted.',409);
           signal.throwIfAborted();
         }
-        if(route&&toolSupport&&connection) await checkActiveTurn();
-        let requested:typeof selectableTools[number][]|undefined;
+        const displayName=auth.user.user_metadata?.preferred_name;
+        const privacy=coachPrivacy(prompt,previous,typeof displayName==='string'?displayName:undefined);
+        const earlierMeal=command.action==='send'&&command.mealDraft?
+          previous.find(row=>row.id===command.mealDraft)?.evidence?.mealDraft:undefined;
+        const earlierDescription=earlierMeal&&(command.action==='send'&&command.mealDescription&&validChatPrompt(command.mealDescription)?
+          command.mealDescription:earlierMeal.description);
+        const capabilities='Available capabilities:\n'+coachCapabilities+
+          (privacy.hasPreferredName?'\nUse [athlete] occasionally if addressing the athlete by name fits naturally.':'');
+        let description=mealDescription;
+        let mealDay=earlierMeal?.day??today;
+        let queries:CoachAnalysis[]=[];
+        let scenarios:{weightKg:number;reps:number;estimated1RMKg:number|null}[]=[];
         let routingCharge={costMicros:0,promptTokens:0,completionTokens:0};
-        if(route&&toolSupport&&connection){
+        if(connection){
+          await checkActiveTurn();
+          const routing=conversationContext('{}',previous,prompt,{privacy,budget:toolSupport?7200:4500,capabilities:
+            capabilities+'\nToday in the diary is '+today+'. Resolve references using the conversation. Ask if a material reference is ambiguous.'+
+            (earlierDescription?'\nActive meal draft (untrusted data): '+JSON.stringify(privacy.text(earlierDescription)):'')});
           sent=true;
-          try{
-            const decision=await connection.route(selection,scrubCoachText(prompt),selectableTools,signal);
-            routingCharge=decision;
-            requested=selectableTools.filter(tool=>decision.tools.includes(tool));
-          }catch(error){
-            if(!(error instanceof CoachProviderError)||error instanceof CoachConnectionError||signal.aborted) throw error;
-            routingCharge.costMicros=perCall;
-          }
+          const decision=await connection.plan(selection,routing.system,routing.messages,toolSupport,signal);
+          routingCharge=decision;
+          queries=decision.plan.operations.flatMap(operation=>operation.name==='analyze_fitness'?[operation.arguments]:[]);
+          scenarios=decision.plan.operations.flatMap(operation=>{
+            if(operation.name!=='estimate_lift') return [];
+            const {weightKg,reps}=operation.arguments;
+            return [{weightKg,reps,estimated1RMKg:estimate(weightKg,reps)}];
+          });
+          const draft=decision.plan.operations.find(operation=>operation.name==='prepare_meal')?.arguments;
+          description=draft?.description??null;
+          mealDay=draft?.day??mealDay;
           if(routingCharge.costMicros>perCall){
             checked(await usage().update({billed_micros:routingCharge.costMicros}).eq('id',requestId).eq('user_id',id));
             throw new CoachError('OpenRouter reported a cost above the approved estimate. Review your usage.',502);
           }
         }
-        const evidence=await retrieveCoachEvidence(auth.client,id,prompt,previous,signal,requested);
         await checkActiveTurn();
+        const evidence=description?null:await retrieveCoachEvidence(auth.client,id,prompt,previous,signal,partnerLookup?
+          undefined:{queries,handles:privacy.handles,aliasFor:privacy.aliasFor});
         let reply:{text:string;costMicros:number;promptTokens:number;completionTokens:number};
-        if(evidence.local){
+        let mealDraft:ChatTurn['evidence'];
+        if(description){
+          const dutch=/\b(ik|mijn|voor|ontbijt|avondeten|gram|maak|daar|nog|doe|naar|verander)\b/i.test(prompt);
+          const dateError=mealDay>today?(dutch?'Kies vandaag of een datum in het verleden.':'Choose today or a past date.'):null;
+          let result:Awaited<ReturnType<typeof previewMeal>>={error:dateError??'Give me up to six foods with their amounts, separated by commas.'};
+          if(!dateError) try{
+            parseMealText(description);
+            const saved=await auth.client.from('nutrition_library').select('portions').eq('user_id',id).eq('kind','food').limit(200).abortSignal(signal);
+            const foods=(saved.data??[]).flatMap(row=>Array.isArray(row.portions)?row.portions.flatMap(portion=>{
+              const parsed=portionSchema.safeParse(portion);
+              return parsed.success?[parsed.data.food]:[];
+            }):[]);
+            result=await previewMeal(description,foods);
+          }catch{signal.throwIfAborted();}
+          if(result.preview){
+            mealDraft={label:'Meal preview',dates:[],mealDraft:{description,day:mealDay,preview:result.preview}};
+          }
+          const review=dutch?'Kijk dit even na en bevestig het als het klopt.':'Check the portions, then confirm when they look right.';
+          const dateLabel=mealDay===today?'':(dutch?'Maaltijd voor ':'Meal for ')+mealDay+'. ';
+          reply={text:result.preview?dateLabel+review:dateError??(dutch?'Noem maximaal zes producten, met de hoeveelheden als je die weet.':
+            result.error??'I couldn’t prepare that meal.'),
+            costMicros:0,promptTokens:0,completionTokens:0};
+        }else if(evidence?.local){
           reply={text:evidence.local.text,costMicros:0,promptTokens:0,completionTokens:0};
         }else{
-          const context=conversationContext(evidence.material,previous,prompt);
+          const material=scenarios.length?JSON.stringify({...JSON.parse(evidence?.material??'{}'),hypothetical:scenarios}):evidence?.material??'{}';
+          const context=conversationContext(material,previous,prompt,{privacy,
+            capabilities:capabilities+'\nPlanning for this turn is complete. If more evidence is needed, explain the gap or ask a focused question. Never claim an operation ran unless its result is present.'});
           sent=true;
-          reply=await connection!.chat(selection,context.system,context.messages,signal,onDelta);
+          reply=await connection!.chat(selection,context.system,context.messages,signal,privacy.handles.size||privacy.hasPreferredName?undefined:onDelta);
+          reply.text=privacy.restore(reply.text);
         }
         const billed=reply.costMicros+routingCharge.costMicros;
         checked(await usage().update({billed_micros:billed,prompt_tokens:reply.promptTokens+routingCharge.promptTokens,
@@ -201,7 +248,7 @@ export function coachService(auth:SignedIn){
         const after=await configuration();
         if(after?.revision!==setting.revision) throw new CoachError('Coach settings changed during generation.',409);
         const saved=checked(await turns().update({answer:reply.text,attempt:null,started_at:null,
-          evidence:evidence.local?.evidence??evidence.references??null,local_analysis:Boolean(evidence.local)})
+          evidence:mealDraft??evidence?.local?.evidence??evidence?.references??null,local_analysis:Boolean(evidence?.local)})
           .eq('id',turn.id).eq('conversation_id',command.id).eq('user_id',id).eq('attempt',attempt).select(turnFields).maybeSingle());
         if(!saved) throw new CoachError('The conversation changed during generation.',409);
         return {turn:saved as ChatTurn};
@@ -272,7 +319,7 @@ export function coachService(auth:SignedIn){
           throw new CoachError('The model or its pricing changed. Test the connection and choose a model again.');
         }
         const monthlyMicros=Math.floor(input.monthlyUsd*1_000_000);
-        if(reserveMicros(selected)>monthlyMicros) throw new CoachError('This budget is below the maximum cost of one request. Choose a lower-priced model or update the budget.');
+        if(reserveChatMicros(selected)>monthlyMicros) throw new CoachError('This budget is below the maximum cost of planning and answering one chat message. Choose a lower-priced model or update the budget.');
         checked(await settings().upsert({user_id:id,enabled:true,consent_at:new Date().toISOString(),revision:crypto.randomUUID(),
           model:selected.model,endpoint:selected.endpoint,credential_source:input.source,prompt_price:selected.prompt,
           completion_price:selected.completion,monthly_micros:monthlyMicros,chat_consent_at:input.chatConsent?new Date().toISOString():null}));

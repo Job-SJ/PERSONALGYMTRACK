@@ -101,6 +101,16 @@ describe('Coach calculated evidence',()=>{
       exerciseCount:1,exercises:[{sessions:2,changePercent:20,bestEstimated1RMKg:70,maxLoggedWeightKg:60}],
     });
   });
+
+  it('combines fuzzy exercise selection, exact reps and locally matched partner cohorts',()=>{
+    const cohort=new Set([data[0].id]);
+    expect(strengthEvidence(data,templates,'Was ik sterker met die gast?',[], '',{exercise:'Bnch Pres',reps:5,cohort})).toMatchObject({
+      exerciseCount:1,exercises:[{reps:5,partnerComparison:{
+        tagged:{sessions:1,meanSessionHeaviestKg:60},other:{sessions:1,meanSessionHeaviestKg:50},
+      }}],
+    });
+    expect(strengthEvidence(data,templates,'Was ik sterker?',[], '',{exercise:'Bnch Pres',reps:8,cohort})).toMatchObject({exerciseCount:0});
+  });
 });
 
 it('groups duplicate provider routes and blocks missing consent and exhausted credits',()=>{
