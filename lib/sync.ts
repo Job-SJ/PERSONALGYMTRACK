@@ -3,7 +3,7 @@ import type {SupabaseClient} from '@supabase/supabase-js';
 import {hevy,HevyError} from './hevy';
 import {importHevy} from './sync-engine';
 
-export async function runSync(client:SupabaseClient,userId:string,key:string) {
+export async function runSync(client:SupabaseClient,userId:string,key:string,backfill=false) {
   const token=crypto.randomUUID();
   const start=new Date();
   const lease=await client.rpc('acquire_sync',{token});
@@ -30,7 +30,7 @@ export async function runSync(client:SupabaseClient,userId:string,key:string) {
         if (result.error || result.count===null) throw new Error('Workout count is unavailable.');
         return result.count;
       },
-    },state.data.cursor_at,start,signal);
+    },state.data.cursor_at,start,signal,backfill);
   } catch (cause) {
     failure=cause instanceof HevyError?cause.message:'Synchronization failed. Check the database setup and try again.';
   }

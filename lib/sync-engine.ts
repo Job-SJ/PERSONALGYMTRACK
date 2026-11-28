@@ -8,7 +8,7 @@ type Store = {
   count(): Promise<number>;
 };
 
-export async function importHevy(source:Source, store:Store, cursor:string|null, started:Date, signal:AbortSignal) {
+export async function importHevy(source:Source, store:Store, cursor:string|null, started:Date, signal:AbortSignal,backfill=false) {
   function checkTime() {
     if (signal.aborted) throw new HevyError('Synchronization timed out. Try again.');
   }
@@ -19,7 +19,7 @@ export async function importHevy(source:Source, store:Store, cursor:string|null,
       primary_muscle:t.primary_muscle_group,secondary_muscles:t.secondary_muscle_groups ?? [],
     })));
   }
-  if (!cursor) {
+  if (!cursor||backfill) {
     const seen=new Set<string>();
     for await (const page of source.workouts(signal)) {
       checkTime();

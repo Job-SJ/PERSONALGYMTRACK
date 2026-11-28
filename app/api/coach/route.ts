@@ -9,7 +9,7 @@ export const maxDuration=120;
 export async function GET(request:Request){
   const auth=await apiSession(request);
   if(auth.response) return auth.response;
-  try{return privateJson(await coachService(auth.session).status());}
+  try{return privateJson(await coachService(auth.session).status(request.signal));}
   catch(error){const failure=coachError(error);return privateJson({error:failure.message},failure.status);}
 }
 

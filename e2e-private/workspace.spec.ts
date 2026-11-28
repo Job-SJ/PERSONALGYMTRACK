@@ -1,4 +1,5 @@
 import {expect,test} from '@playwright/test';
+import {randomUUID} from 'node:crypto';
 import {accessToken,userOne,userTwo} from './fixture.mjs';
 
 test('native bearer authentication is isolated and checks authenticator assurance',async({request})=>{
@@ -17,6 +18,27 @@ test('native bearer authentication is isolated and checks authenticator assuranc
   expect((await request.post('/api/coach',{headers:headers(userTwo,'aal1'),data:{action:'conversations'}})).status()).toBe(403);
   expect((await request.post('/api/coach',{headers:headers(userOne,'aal1'),data:{action:'send',prompt:'test'}})).status()).toBe(400);
   expect((await request.post('/api/jobs/notifications')).status()).toBe(401);
+});
+
+test('Coach finds a training partner in the signed-in owner’s stored workouts',async({request})=>{
+  const id=randomUUID();
+  const turn=randomUUID();
+  const headers={Authorization:'Bearer '+accessToken(userOne)};
+  const created=await request.post('/api/coach',{headers,data:{action:'new-chat',id}});
+  expect(created.status()).toBe(200);
+  const answer=await request.post('/api/coach',{headers,data:{action:'send',id,turn,prompt:'Who do I usually train with?'}});
+  expect(answer.status()).toBe(200);
+  const result=await answer.json();
+  expect(result.turn.answer).toContain('**Alex** — 2 workouts');
+  expect(result.turn.answer).not.toContain('Morgan');
+  expect(result.turn.evidence.dates).toHaveLength(2);
+  expect(result.turn.local_analysis).toBe(true);
+  const persisted=await request.post('/api/coach',{headers,data:{action:'conversation',id}});
+  expect((await persisted.json()).turns[0].evidence).toEqual(result.turn.evidence);
+  const crossAccount=await request.post('/api/coach',{
+    headers:{Authorization:'Bearer '+accessToken(userTwo,'aal2')},data:{action:'conversation',id},
+  });
+  expect(crossAccount.status()).toBe(404);
 });
 
 test('signed-in dashboard, integrated Coach and notification center fit the viewport',async({page},info)=>{
@@ -50,12 +72,18 @@ test('signed-in dashboard, integrated Coach and notification center fit the view
   await expect(page).toHaveURL(/\/$/);
 });
 
-test('Coach setup collects consent and supports persistent free-text follow-ups',async({page},info)=>{
+for(const theme of ['dark','light']) test(`Coach setup and free-text follow-ups in ${theme} mode`,async({page},info)=>{
+  const email=theme==='dark'?'one@example.invalid':'two@example.invalid';
   await page.goto('/login');
-  await page.getByLabel('Email').fill('one@example.invalid');
+  await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill('synthetic-password');
   await page.getByRole('button',{name:'Sign in'}).click();
+  if(theme==='light'){
+    await page.getByLabel('Authenticator code').fill('123456');
+    await page.getByRole('button',{name:'Verify',exact:true}).click();
+  }
   await expect(page).toHaveURL(/\/app$/);
+  await expect(page.locator('.workspace')).toHaveClass(new RegExp('theme-'+theme));
   let personal=false;
   let enabled=false;
   const turns:{id:string;prompt:string;answer:string;created_at:string}[]=[];
@@ -121,12 +149,14 @@ test('Coach setup collects consent and supports persistent free-text follow-ups'
     }
   });
   await page.goto('/app/coach');
-  await page.getByRole('button',{name:'Coach settings',exact:true}).click();
+  await expect(page.getByRole('textbox',{name:'Message Coach'})).toHaveCount(0);
+  await page.getByRole('button',{name:'Connect OpenRouter',exact:true}).click();
   await page.getByLabel('OpenRouter API key').fill('synthetic-inference-key');
-  await page.getByRole('button',{name:'Test connection and find models'}).click();
-  await expect(page.getByRole('option',{name:/Synthetic Free/})).toHaveText(/Free · Recommended/);
-  await expect(page.getByRole('option',{name:/Synthetic Paid/})).toHaveText(/Paid/);
-  await expect(page.getByLabel('Replacement key')).toHaveValue('');
+  await page.getByRole('button',{name:'Connect and find models'}).click();
+  await expect(page.getByRole('button',{name:/Recommended.*Synthetic Free/})).toBeVisible();
+  await expect(page.getByRole('button',{name:/Best value.*Synthetic Paid/})).toBeVisible();
+  await expect(page.getByLabel('OpenRouter API key')).toHaveCount(0);
+  await page.screenshot({path:info.outputPath('coach-onboarding.png'),animations:'disabled'});
   const consent=page.getByRole('checkbox',{name:/logging disabled/});
   await expect(consent).not.toBeChecked();
   await consent.check();
@@ -146,12 +176,19 @@ test('Coach setup collects consent and supports persistent free-text follow-ups'
   await page.getByRole('button',{name:'Rename',exact:true}).click();
   await page.getByRole('textbox',{name:'Conversation title'}).fill('Training review');
   await page.getByRole('button',{name:'Save',exact:true}).click();
-  await expect(page.getByRole('option',{name:'Training review'})).toBeAttached();
+  await page.getByText('Chats',{exact:true}).click();
+  await expect(page.getByRole('button',{name:'Training review'})).toBeVisible();
+  await page.keyboard.press('Escape');
+  const composer=await input.boundingBox();
+  const navigation=await page.locator('.mobile-nav').boundingBox();
+  expect(composer!.y+composer!.height).toBeLessThanOrEqual(navigation?.y??page.viewportSize()!.height);
   await page.screenshot({path:info.outputPath('coach-conversation.png'),animations:'disabled'});
   await page.reload();
-  await page.getByLabel('Conversations').selectOption({label:'Training review'});
+  await page.getByText('Chats',{exact:true}).click();
+  await page.getByRole('button',{name:'Training review'}).click();
   await expect(page.getByText('How about last month?',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Delete',exact:true}).click();
   await page.getByRole('button',{name:'Confirm deletion'}).click();
-  await expect(page.getByRole('option',{name:'Training review'})).toHaveCount(0);
+  await page.getByText('Chats',{exact:true}).click();
+  await expect(page.getByText('No saved chats')).toBeVisible();
 });

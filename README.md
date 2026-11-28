@@ -11,7 +11,7 @@ Bring your workouts, nutrition, bodyweight, and goals together in one private, s
 - **See what’s changing.** Daily Intelligence highlights trends in strength, training volume, and consistency. Use Performance Replay to compare training periods.
 - **Connect your training.** Sync with Hevy Pro or import a Hevy CSV from **Settings → Integrations**.
 - **Track nutrition and bodyweight.** Log meals with Open Food Facts, follow your calorie and macro targets, and review suggested adjustments as you build up a history.
-- **Get optional coaching.** Ask Coach about your recorded progress and choose which reminders you receive.
+- **Get optional coaching.** Ask Coach about trends in your training, nutrition, and recorded training partners.
 
 ## Get started
 
@@ -36,6 +36,8 @@ npm run dev
 </details>
 
 ## More help
+
+To enable Coach, connect an [OpenRouter key](https://openrouter.ai/settings/keys), choose a recommended model, and confirm privacy consent and any paid spending limit.
 
 [Coach setup and privacy](docs/ai-coach.md) · [Troubleshooting](docs/self-hosting.md#troubleshooting) · [Expo development](docs/mobile.md) · [Contributing and testing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
