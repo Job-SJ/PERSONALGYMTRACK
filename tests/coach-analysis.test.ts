@@ -23,22 +23,42 @@ describe('Coach analytical routing',()=>{
   it('discovers the leading training partner without a name in the question',()=>{
     const [query]=planCoachAnalysis('Who do I usually train with?','',today);
     expect(query.tool).toBe('partners');
-    const reply=partnerReply(workouts,query,'Who do I usually train with?','',false);
+    const reply=partnerReply(workouts,query,'Who do I usually train with?','');
     expect(reply.text).toContain('**Alex** — 3 workouts');
-    expect(reply.text).toContain('last on 2026-11-27');
-    expect(reply.evidence.dates).toEqual(['2026-11-27','2026-11-24','2026-10-11']);
+    expect(reply.text).toContain('Last on 2026-11-27');
+    expect(reply.evidence.dates).toEqual(['2026-11-27','2026-11-24','2026-10-11','2026-10-07']);
     expect(discoverPartners(workouts,today).partners.map(({key,count})=>({key,count})))
       .toEqual([{key:'alex',count:3},{key:'morgan',count:1}]);
-    expect(partnerReply(workouts,query,'Who do I train with most often?','',false).text).toContain('**Alex**');
+    expect(partnerReply(workouts,query,'Who do I train with most often?','').text).toContain('**Alex**');
     expect(discoverPartners([partner('unknown','2026-11-07','Trained with purpose.')],today).partners).toEqual([]);
+  });
+
+  it('ranks bare subtitles, name lists and abbreviations while separating explicit evidence',()=>{
+    const sample=[
+      partner('one','2026-11-27','Upper','Marin & R.J.','Trained with Marin. Felt good.'),
+      partner('two','2026-11-24','Lower','Marin (Rin), Rin / R. J.'),
+      partner('three','2026-10-11','Push','rin'),
+      partner('four','2026-10-07','Pull','Quinn'),
+      partner('five','2026-10-06','Quinn','Very Good Workout','Quinn'),
+      partner('six','2026-10-05','Upper','Sore Knee'),
+    ];
+    const [query]=planCoachAnalysis('Who do I usually train with?','',today);
+    const result=partnerReply(sample,query,'Who do I usually train with?','');
+    expect(result.text).toContain('**Marin** — 3 workouts (50%): 1 confirmed by wording, 2 inferred');
+    expect(result.text).toContain('**R.J.** — 2 workouts (33.3%)');
+    expect(result.text).toContain('**Quinn** — 1 workout');
+    expect(result.text).not.toMatch(/Sore|Very Good/);
+    expect(result.evidence.details?.[0]).toContain('2026-11-27 (exercise note, confirmed)');
+    expect(result.evidence.details?.[0]).toContain('2026-10-11 (subtitle, inferred)');
+    expect(partnerReply(sample,query,'How often do I train with Rin?','').text).toContain('**Marin**');
   });
 
   it('handles nickname questions, missing evidence and Dutch follow-ups',()=>{
     const [query]=planCoachAnalysis('En hoe vaak met Lex in de laatste 30 dagen?','Wie is mijn trainingspartner?',today);
     expect(query).toMatchObject({tool:'partners',from:'2026-10-30'});
-    expect(partnerReply(workouts.slice(0,2),query,'Hoe vaak met Lex?','',false).text).toContain('2 trainingen');
-    expect(partnerReply(workouts.slice(0,2),query,'Hoe vaak met Robin?','',false).text).toContain('geen expliciete vermelding');
-    expect(partnerReply([],query,'Wie is mijn trainingspartner?','',false).evidence.dates).toEqual([]);
+    expect(partnerReply(workouts.slice(0,2),query,'Hoe vaak met Lex?','').text).toContain('2 trainingen');
+    expect(partnerReply(workouts.slice(0,2),query,'Hoe vaak met Robin?','').text).toContain('geen partnervermelding');
+    expect(partnerReply([],query,'Wie is mijn trainingspartner?','').evidence.dates).toEqual([]);
   });
 
   it('uses validated ranges and disallows caller-supplied owners or tools',()=>{

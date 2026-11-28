@@ -8,7 +8,7 @@ import {needsCoachRouting,planCoachAnalysis,selectableTools} from './coach-analy
 import {dayKey} from './analytics';
 import type {Topic} from './coach-topics';
 import {loadCoachingContext} from './coach-data';
-import {retrieveCoachEvidence} from './coach-retrieval';
+import {PartnerHistoryError,retrieveCoachEvidence} from './coach-retrieval';
 import {CoachConnectionError,CoachProviderError,isFree,openRouter,reserveMicros,selectionSchema} from './coach-provider';
 import {credentialsConfigured,integrationCredentials,operatorDb} from './integration-credentials';
 
@@ -28,6 +28,7 @@ export class CoachError extends Error {
   constructor(message:string,readonly status=400){super(message);}
 }
 export const coachError=(error:unknown)=>error instanceof CoachError?{message:error.message,status:error.status}:
+  error instanceof PartnerHistoryError?{message:error.message,status:503}:
   error instanceof CoachProviderError?{message:error.message,status:502}:{message:'Coach is temporarily unavailable.',status:503};
 
 export function coachService(auth:SignedIn){

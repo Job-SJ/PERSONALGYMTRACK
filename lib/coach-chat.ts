@@ -25,7 +25,7 @@ export const chatSchema=z.discriminatedUnion('action',[
 ]);
 export type ChatCommand=z.input<typeof chatSchema>;
 export type Conversation={id:string;title:string;updated_at:string};
-export type CoachEvidence={label:string;dates:string[]};
+export type CoachEvidence={label:string;dates:string[];details?:string[]};
 export type ChatTurn={id:string;prompt:string;answer:string|null;created_at:string;evidence?:CoachEvidence|null;local_analysis?:boolean};
 export type ChatEvent={delta:string}|{turn:ChatTurn}|{error:string};
 const bytes=(text:string)=>new TextEncoder().encode(text).length;

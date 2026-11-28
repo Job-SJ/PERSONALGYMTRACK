@@ -59,10 +59,10 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
     expect((await sql.query('select value::int from public.body_measurements')).rows).toEqual([{value:80}]);
     await sql.exec('reset role');
     await sql.query(`insert into public.workouts(user_id,id,title,source,started_at,ended_at,notes) values
-      ($1,'synthetic-partner-a','Push with Alex','csv','2026-11-06T12:00Z','2026-11-06T13:00Z','Trained with Alex.'),
-      ($1,'synthetic-partner-b','Legs','csv','2026-11-08T12:00Z','2026-11-08T13:00Z','Trained with Alex.'),
+      ($1,'synthetic-partner-a','Push with Alex','csv','2026-11-06T12:00Z','2026-11-06T13:00Z','Alex'),
+      ($1,'synthetic-partner-b','Legs','csv','2026-11-08T12:00Z','2026-11-08T13:00Z','Alex'),
       ($1,'synthetic-partner-c','Upper','csv','2026-11-09T12:00Z','2026-11-09T13:00Z',null),
-      ($2,'synthetic-partner-a','Training with Jamie','csv','2026-11-10T12:00Z','2026-11-10T13:00Z',null)`,[owner,other]);
+      ($2,'synthetic-partner-a','Upper','csv','2026-11-10T12:00Z','2026-11-10T13:00Z','Jamie')`,[owner,other]);
     await sql.exec('set role authenticated');
     const metadata=[{id:'synthetic-metadata',source:'hevy',title:'Steps',started_at:'2026-11-07T12:00Z',ended_at:'2026-11-07T13:00Z',
       routine_id:'synthetic-routine',workout_exercises:[{position:0,template_id:'steps',title:'Steps',superset_id:0,
@@ -76,7 +76,7 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
       from public.workouts where id like 'synthetic-partner-%'`);
     const question='Who do I usually train with?';
     const [partnerQuery]=planCoachAnalysis(question,'','2026-11-28');
-    const evidence=partnerReply(stored.rows,partnerQuery,question,'',false);
+    const evidence=partnerReply(stored.rows,partnerQuery,question,'');
     expect(evidence.text).toContain('**Alex** — 2 workouts');
     expect(evidence.text).not.toContain('Jamie');
     expect(evidence.evidence.dates).toEqual(['2026-11-08','2026-11-06']);
