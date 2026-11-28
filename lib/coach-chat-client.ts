@@ -15,6 +15,17 @@ export async function readChatResponse(response:Response,onDelta:(delta:string)=
   const decoder=new TextDecoder();
   let pending='';
   let turn:ChatTurn|undefined;
+  function consume(line:string){
+    if(!line.trim()) return;
+    let event:ChatEvent;
+    try{event=JSON.parse(line) as ChatEvent;}
+    catch{throw new Error('The chat response was invalid. Retry to continue.');}
+    if(!event||typeof event!=='object'||turn) throw new Error('The chat response was invalid. Retry to continue.');
+    if('error' in event) throw new Error(event.error);
+    if('delta' in event&&typeof event.delta==='string') onDelta(event.delta);
+    else if('turn' in event&&event.turn?.answer?.trim()) turn=event.turn;
+    else throw new Error('The response was interrupted. Retry to continue.');
+  }
   try{
     for(;;){
       const {done,value}=await reader.read();
@@ -22,16 +33,9 @@ export async function readChatResponse(response:Response,onDelta:(delta:string)=
       pending+=decoder.decode(value,{stream:true});
       const lines=pending.split('\n');
       pending=lines.pop()!;
-      for(const line of lines){
-        if(!line) continue;
-        let event:ChatEvent;
-        try{event=JSON.parse(line) as ChatEvent;}
-        catch{throw new Error('The chat response was invalid. Retry to continue.');}
-        if('error' in event) throw new Error(event.error);
-        if('delta' in event) onDelta(event.delta);
-        if('turn' in event) turn=event.turn;
-      }
+      for(const line of lines) consume(line);
     }
+    consume(pending+decoder.decode());
   }finally{await reader.cancel().catch(()=>undefined);reader.releaseLock();}
   if(!turn) throw new Error('The response was interrupted. Retry to continue.');
   return {turn};
@@ -91,7 +95,7 @@ export function useCoachChat(transport:Transport,randomId:()=>string,stream:bool
   }
   async function generate(command:Extract<ChatCommand,{action:'send'|'retry'}>,signal:AbortSignal,incremental=stream){
     const result=await request({...command,stream:incremental},signal,delta=>setPartial(value=>value+delta));
-    if(!result.turn) throw new Error('The response was interrupted. Retry to continue.');
+    if(result.turn?.id!==command.turn||!result.turn.answer?.trim()) throw new Error('The response was interrupted. Retry to continue.');
     const turn=result.turn;
     if(turn.evidence?.mealDraft) setActiveMeal({id:turn.id,draft:turn.evidence.mealDraft,confirmed:false});
     setTurns(rows=>rows.map(row=>row.id===turn.id?turn:row));

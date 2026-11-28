@@ -103,6 +103,27 @@ it('accepts regular responses and only commits a completed streamed result',asyn
   await expect(readChatResponse(ndjson({delta:'partial'}),delta)).rejects.toThrow('interrupted');
   await expect(readChatResponse(ndjson({delta:'a'},{error:'Generation stopped.'}),delta)).rejects.toThrow('Generation stopped');
   await expect(readChatResponse(ndjson({delta:'**Answer**'},{turn:finished}),delta)).resolves.toEqual({turn:finished});
+  await expect(readChatResponse(ndjson({turn:{...finished,answer:null}}),delta)).rejects.toThrow('interrupted');
+  const utf8=new TextEncoder().encode(JSON.stringify({turn:{...finished,answer:'Twee sessies in één week.'}}));
+  const split=new Response(new ReadableStream({
+    start(controller){
+      for(const byte of utf8) controller.enqueue(Uint8Array.of(byte));
+      controller.close();
+    },
+  }),{headers:{'Content-Type':'application/x-ndjson'}});
+  await expect(readChatResponse(split,delta)).resolves.toMatchObject({turn:{answer:'Twee sessies in één week.'}});
+});
+
+it('distinguishes a provider timeout from exhausted OpenRouter credits',async()=>{
+  const timed=openRouter(key,async(_url,init)=>new Promise<Response>((_,reject)=>{
+    init?.signal?.addEventListener('abort',()=>reject(init.signal?.reason),{once:true});
+  }),10);
+  const signal=new AbortController().signal;
+  await expect(timed.plan(selection,'Instructions',[{role:'user',content:'How did my training go?'}],false,signal))
+    .rejects.toThrow(/too long.*retry/i);
+  const depleted=openRouter(key,async()=>new Response('payment required',{status:402}));
+  await expect(depleted.chat(selection,'Instructions',[{role:'user',content:'What did I do?'}],signal))
+    .rejects.toThrow(/credit or spending limit/i);
 });
 
 it('formats Markdown as inert text tokens, including HTML, links and images',()=>{

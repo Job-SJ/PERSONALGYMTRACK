@@ -6,6 +6,10 @@ const usage={prompt_tokens:450,completion_tokens:65,cost:0};
 const respond=(model,message)=>Response.json({model,usage,choices:[{finish_reason:'stop',message:{role:'assistant',...message}}]});
 const analyze=(tool,through,options={})=>({name:'analyze_fitness',arguments:{tool,from:null,through,...options}});
 const meal=description=>({name:'prepare_meal',arguments:{description}});
+const streamed=(model,parts,finish='stop')=>new Response([
+  ...parts.map(content=>({model,choices:[{delta:{content},finish_reason:null}]})),
+  {model,choices:[{delta:{},finish_reason:finish}]},{model,choices:[],usage},
+].map(event=>'data: '+JSON.stringify(event)+'\n\n').join('')+'data: [DONE]\n\n',{headers:{'Content-Type':'text/event-stream'}});
 
 globalThis.fetch=async(input,options)=>{
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
@@ -31,11 +35,20 @@ globalThis.fetch=async(input,options)=>{
   assert.ok(!/synthetic_partner7|synthetic\.track2|synthetic_isolated|great session|example\.invalid/i.test(JSON.stringify(messages)));
   const system=messages[0].content;
   assert.match(system,/PERSONALGYMTRACK Coach/);
-  const current=messages.at(-1).content;
+  const current=messages.findLast(row=>row.role==='user')?.content??'';
+  const broad=messages.findLast(row=>row.role==='user')?.content.includes('goede punten van mijn trainingen');
   if(system.includes('Today in the diary')){
     const today=system.match(/Today in the diary is (\d{4}-\d{2}-\d{2})/)[1];
     let operations=[];
-    if(current.includes('bnch')){
+    if(broad){
+      operations=[analyze('training',today),analyze('muscles',today)];
+      return Response.json({model,usage,choices:[{finish_reason:'tool_calls',message:{role:'assistant',
+        content:'Even je data checken voor je echte punten en valkuilen.',
+        tool_calls:operations.map(({name,arguments:args},index)=>({
+          id:'review_'+index,type:'function',function:{name,arguments:JSON.stringify(args)},
+        })),
+      }}]});
+    }else if(current.includes('bnch')){
       assert.match(current,/Partner 1/);
       operations=[analyze('strength',today,{exercise:'bnch press',partner:'Partner 1',reps:5})];
     }else if(current.includes('en vorige maand')){
@@ -56,6 +69,8 @@ globalThis.fetch=async(input,options)=>{
       operations=[{name:'run_sql',arguments:{statement:'select private data'}}];
     }else if(current.includes('weegschaal')){
       operations=[analyze('bodyweight',today)];
+    }else if(current.includes('dated scale sample')){
+      operations=[analyze('bodyweight',today,{from:'2020-01-02'})];
     }else if(current.includes('wie duikt')){
       operations=[analyze('partners',today)];
     }else if(current.includes('95 kg')){
@@ -65,7 +80,23 @@ globalThis.fetch=async(input,options)=>{
       id:'call_'+index,type:'function',function:{name,arguments:JSON.stringify(args)},
     }))}:{content:JSON.stringify({operations})});
   }
+  if(broad){
+    const tools=messages.filter(row=>row.role==='tool');
+    if(!tools.length) return respond(model,{content:'Even je data checken voor je echte punten en valkuilen.'});
+    assert.deepEqual(tools.map(row=>row.tool_call_id),['review_0','review_1']);
+    const [training,muscles]=tools.map(row=>JSON.parse(row.content).result);
+    const parts=[`Sterk: je deed ${training.workouts} trainingen. `,
+      `Een aandachtspunt: ${muscles.muscles.chest.directSets} directe borstsets, zonder andere directe spiergroepen in dit overzicht.`];
+    return streamed(model,parts);
+  }
   const evidence=JSON.parse(system.split('Fitness evidence (JSON): ')[1]);
+  const returned=messages.filter(row=>row.role==='tool').map(row=>JSON.parse(row.content));
+  if(returned.length){
+    const calls=messages.findLast(row=>row.tool_calls)?.tool_calls;
+    assert.deepEqual(messages.filter(row=>row.role==='tool').map(row=>row.tool_call_id),calls.map(call=>call.id));
+    evidence.results=returned.filter(result=>result.tool);
+    evidence.hypothetical=returned.flatMap(result=>result.hypothetical?[result.hypothetical]:[]);
+  }
   const strength=evidence.results.find(row=>row.tool==='strength')?.result.exercises[0];
   if(current.includes('bnch')){
     const {tagged,other}=strength.partnerComparison;
@@ -93,5 +124,7 @@ globalThis.fetch=async(input,options)=>{
     assert.deepEqual(evidence.results,[]);
     return respond(model,{content:'I can analyze your workouts, but deleting them is outside the available Coach tools.'});
   }
+  if(current.includes('scan the big picture')) return streamed(model,['I’ll ', 'check your training history.']);
+  if(current.includes('recovery week structure')) return streamed(model,['An incomplete'], 'length');
   return respond(model,{content:'Welke bedoel je precies?'});
 };
