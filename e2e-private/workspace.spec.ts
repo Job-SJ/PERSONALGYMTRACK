@@ -140,7 +140,7 @@ test('Coach setup collects consent and supports persistent free-text follow-ups'
   await expect.poll(()=>interrupted).toBe(true);
   await page.getByRole('button',{name:'Stop',exact:true}).click();
   stopped=true;
-  await expect(page.getByRole('alert')).toHaveText('Generation stopped.');
+  await expect(page.getByRole('region',{name:'Coach chat'}).getByRole('alert')).toHaveText('Generation stopped.');
   await page.getByRole('button',{name:'Retry reply'}).click();
   await expect(page.locator('.coach-markdown strong').last()).toHaveText('eight sessions');
   await page.getByRole('button',{name:'Rename',exact:true}).click();
