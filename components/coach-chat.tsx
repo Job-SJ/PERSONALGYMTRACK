@@ -22,6 +22,7 @@ export function CoachChat({blocked}:{blocked:boolean}){
   const [copied,setCopied]=useState<string>();
   const log=useRef<HTMLDivElement>(null);
   const composer=useRef<HTMLTextAreaElement>(null);
+  const history=useRef<HTMLDetailsElement>(null);
   const chat=useCoachChat(transport,()=>crypto.randomUUID(),true);
   useEffect(()=>{if(log.current) log.current.scrollTop=log.current.scrollHeight;},[chat.turns,chat.partial,chat.generating]);
   useEffect(()=>{
@@ -36,11 +37,24 @@ export function CoachChat({blocked}:{blocked:boolean}){
     <div>
     <div className="coach-chat-toolbar">
       <button className="quiet" disabled={disabled} onClick={()=>{chat.newChat();reset();}}>New chat</button>
-      <select aria-label="Conversations" value={chat.conversation?.id??''} disabled={disabled||chat.loading}
-        onChange={event=>{if(event.target.value) chat.select(event.target.value);else chat.newChat();reset();}}>
-        <option value="">New conversation</option>
-        {chat.conversations.map(row=><option key={row.id} value={row.id}>{row.title==='New chat'?new Date(row.updated_at).toLocaleString():row.title}</option>)}
-      </select>
+      <details className="coach-history" ref={history} onKeyDown={event=>{
+        if(event.key==='Escape'&&history.current?.open){
+          history.current.open=false;
+          history.current.querySelector('summary')?.focus();
+        }
+      }}>
+        <summary className="quiet">Chats</summary>
+        <div className="coach-history-list" aria-label="Conversations">
+          {chat.loading&&<p className="muted" role="status">Loading chats…</p>}
+          {!chat.loading&&!chat.conversations.length&&<p className="muted">No saved chats</p>}
+          {chat.conversations.map(row=><button type="button" className="quiet" key={row.id} disabled={disabled}
+            aria-current={chat.conversation?.id===row.id?'true':undefined} onClick={()=>{
+              chat.select(row.id);reset();
+              if(history.current) history.current.open=false;
+              history.current?.querySelector('summary')?.focus();
+            }}>{row.title==='New chat'?new Date(row.updated_at).toLocaleString():row.title}</button>)}
+        </div>
+      </details>
       {chat.conversation&&<><button className="quiet" disabled={disabled} onClick={()=>setRename(chat.conversation?.title)}>Rename</button>
         <button className="quiet" disabled={disabled} onClick={()=>setConfirm(!confirm)}>Delete</button></>}
     </div>

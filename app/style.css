@@ -407,7 +407,6 @@ a.row:hover,.rows summary:hover{background:var(--raised)}.sidebar nav a[aria-cur
 .coach-answer{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65}
 .coach-chat{display:grid;gap:.8rem;padding:clamp(.75rem,2.5vw,1.4rem);min-width:0}
 .coach-chat-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem}
-.coach-chat-toolbar select{flex:1 1 11rem;min-width:0;max-width:100%}
 .coach-log{min-height:15rem;height:clamp(15rem,51dvh,36rem);overflow-y:auto;overflow-anchor:none;overscroll-behavior:contain;padding:.75rem .35rem}
 .coach-welcome{display:grid;gap:1rem;justify-items:start;padding:1rem 0}
 .coach-welcome h2{font-size:clamp(1.2rem,3vw,1.8rem);margin:0}
@@ -438,7 +437,15 @@ a.row:hover,.rows summary:hover{background:var(--raised)}.sidebar nav a[aria-cur
 .coach-heading h1{font-size:1.55rem}
 .coach-chat{padding:0;grid-template-rows:auto minmax(0,1fr);height:max(23rem,calc(100dvh - 9.5rem));min-width:0}
 .coach-chat-toolbar{padding-bottom:.5rem;border-bottom:1px solid var(--line)}
-.coach-chat-toolbar select{flex:0 1 16rem}
+.coach-history{position:relative}
+.coach-history summary{cursor:pointer}
+.coach-history summary::-webkit-details-marker{display:none}
+.coach-history-list{display:grid;gap:.25rem;position:absolute;z-index:1;top:calc(100% + .4rem);left:0;
+  width:min(16rem,calc(100vw - 10rem));max-height:min(24rem,50dvh);overflow-y:auto;padding:.5rem;
+  border:1px solid var(--line);border-radius:.75rem;background:var(--panel);scrollbar-width:thin}
+.coach-history-list button{text-align:left;justify-content:flex-start;overflow-wrap:anywhere}
+.coach-history-list [aria-current=true]{border-color:var(--accent)}
+.coach-history-list p{padding:.35rem}
 .coach-log{min-height:0;height:auto;padding:1rem clamp(.35rem,3vw,2rem);scrollbar-width:thin}
 .coach-welcome{min-height:65%;align-content:center}
 .coach-user{border:0;background:var(--panel);max-width:85%}
@@ -459,6 +466,5 @@ a.row:hover,.rows summary:hover{background:var(--raised)}.sidebar nav a[aria-cur
   .coach-composer textarea{font-size:16px}
   .coach-followups{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
   .coach-followups .quiet{flex:none;white-space:nowrap}
-  .coach-chat-toolbar select{flex:1 1 8rem}
 }
 @media(min-width:680px){.notification-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
