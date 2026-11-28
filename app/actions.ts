@@ -96,7 +96,7 @@ export async function sync(form:FormData) {
       await hevy(key).test(AbortSignal.timeout(12000));
       status='Hevy connection verified.';
     } else {
-      await runSync(authenticated.client,authenticated.user.id,key);
+      await runSync(authenticated.client,authenticated.user.id,key,form.get('mode')==='backfill');
       revalidatePath('/app');
     }
   } catch(err) {

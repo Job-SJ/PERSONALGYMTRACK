@@ -50,6 +50,23 @@ describe('Hevy sync engine',()=>{
     expect([...h.records.keys()]).toEqual(['new']);
     expect(h.transport.mock.calls.map(([url])=>new URL(String(url))).filter(u=>u.pathname.endsWith('/events')).map(u=>u.searchParams.get('since'))).toEqual(Array(2).fill('2026-11-25T13:55:00.000Z'));
   });
+  it('refreshes old metadata by existing workout ID without treating absent workouts as deletions',async()=>{
+    const recorded={...stub('same','Workout'),routine_id:'synthetic-routine',exercises:[{
+      index:0,title:'Steps',exercise_template_id:'stairs',superset_id:0,sets:[{index:0,type:'normal',custom_metric:45}],
+    }]};
+    const h=harness({
+      '/v1/exercise_templates':envelope('exercise_templates',[]),
+      '/v1/workouts':envelope('workouts',[recorded]),
+      '/v1/workouts/events':envelope('events',[]),
+      '/v1/workouts/count':{workout_count:1},
+    });
+    for(let run=0;run<2;run++) await importHevy(h.source,h.store,'2026-11-25T14:00:00Z',now,h.signal,true);
+    expect([...h.records.keys()]).toEqual(['same']);
+    expect(h.records.get('same')).toMatchObject({routine_id:'synthetic-routine',workout_exercises:[{
+      superset_id:0,workout_sets:[{custom_metric:45}],
+    }]});
+    expect(h.store.workouts.mock.calls.every(([,deletedIds])=>!deletedIds.length)).toBe(true);
+  });
   it('refuses to advance the cursor when the provider workout count disagrees',async()=>{
     const h=harness({
       '/v1/exercise_templates':envelope('exercise_templates',[]),

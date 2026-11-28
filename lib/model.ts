@@ -8,14 +8,15 @@ export const setSchema = z.object({
   duration_seconds: z.number().nonnegative().nullish(),
   distance_meters: z.number().nonnegative().nullish(),
   rpe: z.number().min(0).max(10).nullish(),
+  custom_metric: z.number().nullish(),
 });
 const timestamp = z.iso.datetime({offset:true});
 export const workoutSchema = z.object({
-  id: z.string().min(1), title: z.string(), description: z.string().nullish(),
+  id: z.string().min(1), title: z.string(), description: z.string().nullish(), routine_id:z.string().nullish(),
   start_time: timestamp, end_time: timestamp, updated_at: timestamp.optional(),
   exercises: z.array(z.object({
     index: z.number().int().nonnegative(), title: z.string(),
-    exercise_template_id: z.string().min(1), notes: z.string().nullish(), sets: z.array(setSchema),
+    exercise_template_id: z.string().min(1), notes: z.string().nullish(), superset_id:z.number().int().nullish(), sets: z.array(setSchema),
   })),
 }).refine(w => Date.parse(w.end_time) >= Date.parse(w.start_time));
 export const templateSchema = z.object({
@@ -34,8 +35,10 @@ export function normalize(w: z.infer<typeof workoutSchema>, source: 'hevy'|'csv'
   return {
     id: source === 'csv' ? 'csv:' + w.id : w.id, title:w.title, source,
     started_at:w.start_time, ended_at:w.end_time, notes:w.description,
+    ...(w.routine_id===undefined?{}:{routine_id:w.routine_id}),
     workout_exercises:w.exercises.map(e=>({
       position:e.index, title:e.title, template_id:e.exercise_template_id, notes:e.notes,
+      ...(e.superset_id===undefined?{}:{superset_id:e.superset_id}),
       workout_sets:e.sets.map(({index,...s})=>({...s, position:index})),
     })),
   };
