@@ -6,7 +6,7 @@ import type {Topic} from './coach-topics';
 import type {Goal,Measurement,Template,Workout} from './model';
 import {portionSchema,type Entry,type Target} from './nutrition';
 
-export async function loadCoachingContext(client:SupabaseClient,topic:Topic){
+export async function loadCoachingContext(client:SupabaseClient,topic?:Topic){
   const today=dayKey(new Date());
   const start=shiftDay(today,-60);
   const [training,templates,body,diary,complete,targets,goals]=await Promise.all([

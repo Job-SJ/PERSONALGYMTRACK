@@ -405,6 +405,23 @@ a.row:hover,.rows summary:hover{background:var(--raised)}.sidebar nav a[aria-cur
 .coach-questions{grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))}
 .coach-questions button{text-align:left;border:1px solid var(--line);min-height:44px}
 .coach-answer{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65}
+.coach-chat{display:grid;gap:.8rem;padding:clamp(.75rem,2.5vw,1.4rem);min-width:0}
+.coach-chat-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem}
+.coach-chat-toolbar select{flex:1 1 11rem;min-width:0;max-width:100%}
+.coach-log{min-height:15rem;height:clamp(15rem,51dvh,36rem);overflow-y:auto;overflow-anchor:none;overscroll-behavior:contain;padding:.75rem .35rem}
+.coach-welcome{display:grid;gap:1rem;justify-items:start;padding:1rem 0}
+.coach-welcome h2{font-size:clamp(1.2rem,3vw,1.8rem);margin:0}
+.coach-turn{display:grid;gap:.8rem;margin-bottom:1.3rem}
+.coach-user{justify-self:end;max-width:min(88%,44rem);border:1px solid var(--line);border-radius:1rem 1rem .25rem 1rem;padding:.7rem .95rem;white-space:pre-wrap;overflow-wrap:anywhere}
+.coach-markdown{overflow-wrap:anywhere;line-height:1.6}
+.coach-md-heading{font-weight:700;margin-top:.7rem}
+.coach-md-list{padding-inline-start:.75rem}
+.coach-md-paragraph:empty{min-height:.45rem}
+.coach-md-code,.coach-markdown code{font-family:monospace}
+.coach-md-code{white-space:pre-wrap}
+.coach-composer{display:flex;gap:.65rem;align-items:end}
+.coach-composer textarea{flex:1;min-width:0;min-height:3rem;resize:vertical;max-height:9rem}
+.coach-processing{font-size:.82rem;margin:0}
 .workspace-settings{display:none}
 @media(max-width:820px){.workspace-settings{display:inline-flex;align-items:center;min-height:44px}}
 .notification-list{list-style:none;padding:0;margin-bottom:0}

@@ -17,7 +17,7 @@ const safeExercises=new Map([
 type Observations={today:string;workouts:Workout[];templates:Template[];weights:Measurement[];
   entries:Entry[];completed:string[];target:Target|null;goals:Goal[];capped:boolean};
 
-export function coachingContext(data:Observations,topic:Topic){
+export function coachingContext(data:Observations,topic?:Topic){
   const today=z.iso.date().parse(data.today);
   const through=shiftDay(today,-1);
   const start=shiftDay(today,-30);
@@ -90,5 +90,5 @@ export function coachingContext(data:Observations,topic:Topic){
   const payload=topic==='nutrition'?{through,historyMayBeCapped:data.capped,nutrition30d,target,weight,adaptiveNutrition}:
     topic==='bench'||topic==='strength'||topic==='week'||topic==='next'?training:
     { ...training,nutrition30d,target,weight,activeGoals,adaptiveNutrition };
-  return JSON.stringify({question:topics[topic],evidence:payload});
+  return JSON.stringify({...(topic?{question:topics[topic]}:{}),evidence:payload});
 }
