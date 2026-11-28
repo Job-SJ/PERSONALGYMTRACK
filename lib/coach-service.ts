@@ -3,10 +3,13 @@ import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import type {apiSession} from './api-session';
 import {coachInstructions} from './coach-context';
-import {conversationContext,validChatPrompt,type ChatCommand,type ChatTurn} from './coach-chat';
+import {conversationContext,scrubCoachText,validChatPrompt,type ChatCommand,type ChatTurn} from './coach-chat';
+import {needsCoachRouting,planCoachAnalysis,selectableTools} from './coach-analysis';
+import {dayKey} from './analytics';
 import type {Topic} from './coach-topics';
 import {loadCoachingContext} from './coach-data';
-import {CoachProviderError,isFree,openRouter,reserveMicros,selectionSchema} from './coach-provider';
+import {retrieveCoachEvidence} from './coach-retrieval';
+import {CoachConnectionError,CoachProviderError,isFree,openRouter,reserveMicros,selectionSchema} from './coach-provider';
 import {credentialsConfigured,integrationCredentials,operatorDb} from './integration-credentials';
 
 type SignedIn=NonNullable<Awaited<ReturnType<typeof apiSession>>['session']>;
@@ -35,7 +38,7 @@ export function coachService(auth:SignedIn){
   const vault=integrationCredentials(auth,'openrouter');
   const fields='enabled,consent_at,chat_consent_at,model,endpoint,credential_source,prompt_price,completion_price,monthly_micros,revision';
   const conversationFields='id,title,updated_at';
-  const turnFields='id,prompt,answer,created_at';
+  const turnFields='id,prompt,answer,created_at,evidence,local_analysis';
   const conversations=()=>client.from('coach_conversations');
   const turns=()=>client.from('coach_turns');
   const usage=()=>client.from('coach_usage');
@@ -95,6 +98,7 @@ export function coachService(auth:SignedIn){
 
     const setting=await configuration();
     if(!setting?.enabled||!setting.consent_at||!setting.chat_consent_at) throw new CoachError('Enable Coach and grant chat consent in settings.',403);
+    const revision=setting.revision;
     const selection=selectionSchema.parse({model:setting.model,endpoint:setting.endpoint,prompt:setting.prompt_price,completion:setting.completion_price});
     const [recent,existing]=await Promise.all([
       turns().select(turnFields).eq('conversation_id',command.id).eq('user_id',id)
@@ -110,7 +114,12 @@ export function coachService(auth:SignedIn){
     if(!prompt) throw new CoachError('Message not found.',404);
     if(!validChatPrompt(prompt)) throw new CoachError('Use up to 1,800 UTF-8 bytes and remove any credentials from your message.');
     signal.throwIfAborted();
-    const reservation=reserveMicros(selection);
+    const previous=history.filter(row=>row.id!==command.turn);
+    const previousPrompt=previous.find(row=>row.answer)?.prompt??'';
+    const local=planCoachAnalysis(prompt,previousPrompt,dayKey(new Date()))[0]?.tool==='partners';
+    const route=needsCoachRouting(prompt,previousPrompt);
+    const perCall=reserveMicros(selection);
+    const reservation=local?0:perCall*(route?2:1);
     const requestId=checked(await client.rpc('reserve_coach_request',{owner_id:id,settings_revision:setting.revision,cost_micros:reservation}));
     if(!requestId) throw new CoachError('Coach is cooling down or has reached the monthly usage limit.',429);
     let sent=false;
@@ -132,29 +141,66 @@ export function coachService(auth:SignedIn){
       }
       try{
         checked(await conversations().update({updated_at:started.toISOString()}).eq('id',command.id).eq('user_id',id));
-        const connection=await provider(setting.credential_source);
-        const {models}=await connection.models(signal);
-        if(!models.some(model=>model.model===selection.model&&model.endpoint===selection.endpoint&&
-          model.prompt<=selection.prompt&&model.completion<=selection.completion&&isFree(model)===isFree(selection))){
-          throw new CoachError('Your model no longer meets the approved pricing and retention requirements. Choose a new model in settings.');
+        const connection=local?null:await provider(setting.credential_source);
+        let toolSupport=false;
+        if(connection){
+          const {models}=await connection.models(signal);
+          const available=models.find(model=>model.model===selection.model&&model.endpoint===selection.endpoint&&
+            model.prompt<=selection.prompt&&model.completion<=selection.completion&&isFree(model)===isFree(selection));
+          if(!available){
+            throw new CoachError('Your model no longer meets the approved pricing and retention requirements. Choose a new model in settings.');
+          }
+          toolSupport=available.capabilities.includes('tools')&&available.capabilities.includes('tool_choice');
         }
-        const evidence=await loadCoachingContext(auth.client);
-        const context=conversationContext(evidence,history.filter(row=>row.id!==command.turn),prompt);
-        const current=await configuration();
-        if(!current?.enabled||!current.chat_consent_at||current.revision!==setting.revision) throw new CoachError('Coach settings changed. Try again.',409);
-        const activeTurn=checked(await turns().select('id').eq('id',turn.id).eq('conversation_id',command.id)
-          .eq('user_id',id).eq('attempt',attempt).maybeSingle());
-        if(!activeTurn) throw new CoachError('The conversation was deleted.',409);
-        signal.throwIfAborted();
-        sent=true;
-        const reply=await connection.chat(selection,context.system,context.messages,signal,onDelta);
-        checked(await usage().update({billed_micros:reply.costMicros,prompt_tokens:reply.promptTokens,completion_tokens:reply.completionTokens})
+        const turnId=turn.id;
+        const conversationId=command.id;
+        async function checkActiveTurn(){
+          const [current,active]=await Promise.all([configuration(),turns().select('id').eq('id',turnId)
+            .eq('conversation_id',conversationId).eq('user_id',id).eq('attempt',attempt).maybeSingle()]);
+          if(!current?.enabled||!current.chat_consent_at||current.revision!==revision){
+            throw new CoachError('Coach settings changed. Try again.',409);
+          }
+          if(!checked(active)) throw new CoachError('The conversation was deleted.',409);
+          signal.throwIfAborted();
+        }
+        if(route&&toolSupport&&connection) await checkActiveTurn();
+        let requested:typeof selectableTools[number][]|undefined;
+        let routingCharge={costMicros:0,promptTokens:0,completionTokens:0};
+        if(route&&toolSupport&&connection){
+          sent=true;
+          try{
+            const decision=await connection.route(selection,scrubCoachText(prompt),selectableTools,signal);
+            routingCharge=decision;
+            requested=selectableTools.filter(tool=>decision.tools.includes(tool));
+          }catch(error){
+            if(!(error instanceof CoachProviderError)||error instanceof CoachConnectionError||signal.aborted) throw error;
+            routingCharge.costMicros=perCall;
+          }
+          if(routingCharge.costMicros>perCall){
+            checked(await usage().update({billed_micros:routingCharge.costMicros}).eq('id',requestId).eq('user_id',id));
+            throw new CoachError('OpenRouter reported a cost above the approved estimate. Review your usage.',502);
+          }
+        }
+        const evidence=await retrieveCoachEvidence(auth.client,id,prompt,previous,signal,requested);
+        await checkActiveTurn();
+        let reply:{text:string;costMicros:number;promptTokens:number;completionTokens:number};
+        if(evidence.local){
+          reply={text:evidence.local.text,costMicros:0,promptTokens:0,completionTokens:0};
+        }else{
+          const context=conversationContext(evidence.material,previous,prompt);
+          sent=true;
+          reply=await connection!.chat(selection,context.system,context.messages,signal,onDelta);
+        }
+        const billed=reply.costMicros+routingCharge.costMicros;
+        checked(await usage().update({billed_micros:billed,prompt_tokens:reply.promptTokens+routingCharge.promptTokens,
+          completion_tokens:reply.completionTokens+routingCharge.completionTokens})
           .eq('id',requestId).eq('user_id',id));
-        if(reply.costMicros>reservation) throw new CoachError('OpenRouter reported a cost above the approved estimate. Review your usage.',502);
+        if(billed>reservation||reply.costMicros>perCall) throw new CoachError('OpenRouter reported a cost above the approved estimate. Review your usage.',502);
         signal.throwIfAborted();
         const after=await configuration();
         if(after?.revision!==setting.revision) throw new CoachError('Coach settings changed during generation.',409);
-        const saved=checked(await turns().update({answer:reply.text,attempt:null,started_at:null})
+        const saved=checked(await turns().update({answer:reply.text,attempt:null,started_at:null,
+          evidence:evidence.local?.evidence??evidence.references??null,local_analysis:Boolean(evidence.local)})
           .eq('id',turn.id).eq('conversation_id',command.id).eq('user_id',id).eq('attempt',attempt).select(turnFields).maybeSingle());
         if(!saved) throw new CoachError('The conversation changed during generation.',409);
         return {turn:saved as ChatTurn};
@@ -168,20 +214,38 @@ export function coachService(auth:SignedIn){
   }
   return {
     chat,
-    async status(){
+    async status(signal?:AbortSignal){
       const now=new Date();
       const month=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1)).toISOString();
       const cutoff=new Date(Date.now()-90*86400000).toISOString();
-      const [personal,setting,history,currentUsage]=await Promise.all([
+      const [personal,setting,history,currentUsage,schema,workoutSchema]=await Promise.all([
         vault.connected(),configuration(),
         usage().select('id,created_at,topic,answer').eq('user_id',id).not('answer','is',null).gte('created_at',cutoff).order('created_at',{ascending:false}).limit(20),
         usage().select('reserved_micros,billed_micros,prompt_tokens,completion_tokens').eq('user_id',id).gte('created_at',month).limit(240),
+        auth.client.from('coach_turns').select('evidence').eq('user_id',id).limit(0),
+        auth.client.from('workouts').select('routine_id').eq('user_id',id).limit(0),
       ]);
+      checked(schema);
+      checked(workoutSchema);
       const rows=checked(currentUsage)??[];
+      const usd=rows.reduce((sum,row)=>sum+Number(row.billed_micros??row.reserved_micros),0)/1_000_000;
+      let connectionIssue:null|'invalid-key'|'credit-limit'|'unavailable-model'|'provider-outage'=null;
+      if(setting?.enabled&&setting.chat_consent_at&&(setting.credential_source==='personal'?personal:process.env.OPENROUTER_INSTANCE_KEY)){
+        const selection=selectionSchema.parse({model:setting.model,endpoint:setting.endpoint,prompt:setting.prompt_price,completion:setting.completion_price});
+        try{
+          const connection=await provider(setting.credential_source);
+          const [key,{models}]=await Promise.all([connection.test(signal),connection.models(signal)]);
+          if(!models.some(model=>model.model===selection.model&&model.endpoint===selection.endpoint&&
+            model.prompt<=selection.prompt&&model.completion<=selection.completion&&model.free===isFree(selection))) connectionIssue='unavailable-model';
+          else if(isFree(selection)?key.freeLimitReached:key.paidLimitReached) connectionIssue='credit-limit';
+        }catch(error){
+          connectionIssue=error instanceof CoachConnectionError?error.kind:'provider-outage';
+        }
+      }
       const exposed=setting?{enabled:setting.enabled,model:setting.model,credential_source:setting.credential_source,
         monthly_micros:setting.monthly_micros,chatConsent:Boolean(setting.chat_consent_at)}:null;
-      return {personal,instance:Boolean(process.env.OPENROUTER_INSTANCE_KEY),setting:exposed,history:checked(history)??[],
-        usage:{requests:rows.length,usd:rows.reduce((sum,row)=>sum+Number(row.billed_micros??row.reserved_micros),0)/1_000_000,
+      return {personal,instance:Boolean(process.env.OPENROUTER_INSTANCE_KEY),setting:exposed,history:checked(history)??[],connectionIssue,
+        usage:{requests:rows.length,usd,
           tokens:rows.reduce((sum,row)=>sum+(row.prompt_tokens??0)+(row.completion_tokens??0),0)}};
     },
     async setup(input:z.infer<typeof setupSchema>,signal?:AbortSignal){
@@ -189,13 +253,13 @@ export function coachService(auth:SignedIn){
         if(!await vault.reserveCheck()) throw new CoachError('Wait 15 seconds before testing again.',429);
         if(input.source==='instance'&&input.key) throw new CoachError('Use the personal option for a replacement key.');
         const connection=await provider(input.source,input.key);
-        await connection.test(signal);
-        const {models,diagnostic}=await connection.models(signal);
+        const [keyInfo,{models,diagnostic}]=await Promise.all([connection.test(signal),connection.models(signal)]);
         if(input.key){
           await disable();
           await vault.save(input.key);
         }
-        return {models:models.slice(0,300),diagnostic};
+        const eligible=models.filter(model=>model.free?!keyInfo.freeLimitReached:!keyInfo.paidLimitReached);
+        return {models:eligible.slice(0,300),diagnostic:diagnostic??(!eligible.length?'The OpenRouter key has no remaining usable budget or free requests.':null)};
       }
       if(input.action==='enable'){
         if(!await vault.reserveCheck(true)) throw new CoachError('Wait 15 seconds before saving again.',429);

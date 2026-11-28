@@ -14,6 +14,8 @@ const template={id:'fixture-bench',title:'Bench Press (Barbell)',type:'weight_re
 const entries=[{id:'40000000-0000-4000-8000-000000000004',day:today,meal:'Lunch',created_at:today+'T12:00:00Z',
   portion:{amount:200,unit:'g',food:{name:'Synthetic oat bowl',source:'Custom label',preparation:'As sold',basis:'g',values:{kcal:180,protein:12,carbs:20,fat:5}}}}];
 const factors=[{id:factorId,status:'verified',factor_type:'totp',friendly_name:'Synthetic factor',created_at:created,updated_at:created}];
+const coachConversations=new Map();
+const coachTurns=new Map();
 const account=(id)=>({id,aud:'authenticated',role:'authenticated',email:id===userOne?'one@example.invalid':'two@example.invalid',created_at:created,
   app_metadata:{provider:'email'},user_metadata:{},factors:id===userTwo?factors:[]});
 const base=(value)=>Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -43,7 +45,8 @@ function rows(table,id){
   if(table==='body_measurements') return [{id:'fixture-weight',day:on(-1),kind:'weight',source:'manual',value:isOne?82:61}];
   if(table==='workouts') return Array.from({length:isOne?12:3},(_,index)=>({
     id:'fixture-workout-'+index,title:(isOne?'Cedar':'Maple')+' session '+(index+1),source:'hevy',
-    started_at:on(-1-index*4)+'T17:00:00Z',ended_at:on(-1-index*4)+'T18:00:00Z',notes:null,
+    started_at:on(-1-index*4)+'T17:00:00Z',ended_at:on(-1-index*4)+'T18:00:00Z',
+    notes:index<2?(isOne?'Trained with Alex.':'Trained with Morgan.'):null,
     workout_exercises:[{position:0,template_id:template.id,title:template.title,notes:null,workout_sets:[
       {position:0,type:'normal',reps:5,weight_kg:90-index*2,duration_seconds:null,distance_meters:null,rpe:8},
     ]}],
@@ -72,8 +75,43 @@ if(process.env.PGT_FIXTURE_LISTEN==='1'){
     if(url.pathname==='/auth/v1/logout'&&claims) return send(200,{});
     if(url.pathname.startsWith('/rest/v1/')){
       const table=url.pathname.split('/')[3];
-      if(auth==='sb_secret_synthetic-fixture') return send(200,[]);
+      const filters=url.searchParams;
+      const owner=filters.get('user_id')?.slice(3)??body.user_id;
+      const objectResponse=request.headers.accept?.includes('vnd.pgrst.object');
+      const recordId=filters.get('id')?.slice(3);
+      if(auth==='sb_secret_synthetic-fixture'){
+        if(table==='rpc'&&url.pathname.endsWith('/reserve_coach_request')){
+          return send(200,body.cost_micros===0?'50000000-0000-4000-8000-000000000005':null);
+        }
+        if(table==='coach_settings'&&(owner===userOne||owner===userTwo)) return send(200,[{
+          enabled:true,consent_at:created,chat_consent_at:created,credential_source:'personal',model:'synthetic/free',
+          endpoint:'synthetic',prompt_price:0,completion_price:0,monthly_micros:0,revision:'60000000-0000-4000-8000-000000000006',
+        }]);
+        if(table==='coach_conversations'||table==='coach_turns'){
+          const records=table==='coach_conversations'?coachConversations:coachTurns;
+          if(request.method==='POST'){
+            const record={title:'New chat',updated_at:created,created_at:created,answer:null,...body};
+            records.set(record.id,record);
+            return send(201,objectResponse?record:[record]);
+          }
+          let selected=[...records.values()].filter(row=>row.user_id===owner&&(!recordId||row.id===recordId));
+          const conversation=filters.get('conversation_id')?.slice(3);
+          if(conversation) selected=selected.filter(row=>row.conversation_id===conversation);
+          const attempt=filters.get('attempt')?.match(/^eq\.(.*)$/)?.[1];
+          if(attempt) selected=selected.filter(row=>row.attempt===attempt);
+          if(request.method==='PATCH'&&!filters.get('started_at')?.startsWith('lt.')) for(const row of selected) Object.assign(row,body);
+          return send(200,objectResponse?selected[0]??null:selected);
+        }
+        return send(200,[]);
+      }
       if(!claims||(claims.sub===userTwo&&claims.aal!=='aal2')) return send(403,{code:'42501',message:'Access denied'});
+      if(table==='coach_conversations'){
+        return send(200,[...coachConversations.values()].filter(row=>row.user_id===claims.sub&&(!recordId||row.id===recordId)));
+      }
+      if(table==='coach_turns'){
+        const conversation=filters.get('conversation_id')?.slice(3);
+        return send(200,[...coachTurns.values()].filter(row=>row.user_id===claims.sub&&row.conversation_id===conversation));
+      }
       return send(200,rows(table,claims.sub));
     }
     return send(404,{message:'Synthetic endpoint unavailable'});

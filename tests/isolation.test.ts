@@ -1,6 +1,8 @@
 import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {expect,it} from 'vitest';
+import {partnerReply,planCoachAnalysis} from '../lib/coach-analysis';
+import type {PartnerWorkout} from '../lib/coach-partners';
 const owner='10000000-0000-0000-0000-000000000001';
 it('applies migrations, isolates two owners, and requires AAL2 after TOTP verification',async()=>{
   const sql=new PGlite();
@@ -23,6 +25,8 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
     await sql.exec(await readFile(new URL('../supabase/migrations/202611270002_coach.sql',import.meta.url),'utf8'));
     await sql.exec(await readFile(new URL('../supabase/migrations/202611270003_notifications.sql',import.meta.url),'utf8'));
     await sql.exec(await readFile(new URL('../supabase/migrations/202611280001_coach_chat.sql',import.meta.url),'utf8'));
+    await sql.exec(await readFile(new URL('../supabase/migrations/202611280002_coach_evidence.sql',import.meta.url),'utf8'));
+    await sql.exec(await readFile(new URL('../supabase/migrations/202611280003_hevy_workout_metadata.sql',import.meta.url),'utf8'));
     const [tableCheck,policies,constraints,indexes,rpcCheck]=await sql.exec(await readFile(new URL('../supabase/tests/schema_check.sql',import.meta.url),'utf8'));
     expect(tableCheck.rows).toHaveLength(8);
     for(const table of tableCheck.rows) expect(table).toMatchObject({
@@ -53,6 +57,29 @@ it('applies migrations, isolates two owners, and requires AAL2 after TOTP verifi
     expect((await sql.query('select value from public.body_measurements')).rows).toEqual([]);
     await setAal('aal2');
     expect((await sql.query('select value::int from public.body_measurements')).rows).toEqual([{value:80}]);
+    await sql.exec('reset role');
+    await sql.query(`insert into public.workouts(user_id,id,title,source,started_at,ended_at,notes) values
+      ($1,'synthetic-partner-a','Push with Alex','csv','2026-11-06T12:00Z','2026-11-06T13:00Z','Trained with Alex.'),
+      ($1,'synthetic-partner-b','Legs','csv','2026-11-08T12:00Z','2026-11-08T13:00Z','Trained with Alex.'),
+      ($1,'synthetic-partner-c','Upper','csv','2026-11-09T12:00Z','2026-11-09T13:00Z',null),
+      ($2,'synthetic-partner-a','Training with Jamie','csv','2026-11-10T12:00Z','2026-11-10T13:00Z',null)`,[owner,other]);
+    await sql.exec('set role authenticated');
+    const metadata=[{id:'synthetic-metadata',source:'hevy',title:'Steps',started_at:'2026-11-07T12:00Z',ended_at:'2026-11-07T13:00Z',
+      routine_id:'synthetic-routine',workout_exercises:[{position:0,template_id:'steps',title:'Steps',superset_id:0,
+        workout_sets:[{position:0,type:'normal',custom_metric:45}]}]}];
+    for(let attempt=0;attempt<2;attempt++) await sql.query('select public.store_workouts($1)',[JSON.stringify(metadata)]);
+    expect((await sql.query(`select routine_id,superset_id,custom_metric::int from public.workouts
+      join public.workout_exercises e on e.user_id=workouts.user_id and e.workout_id=workouts.id
+      join public.workout_sets s on s.user_id=e.user_id and s.workout_id=e.workout_id and s.exercise_position=e.position
+      where workouts.id='synthetic-metadata'`)).rows).toEqual([{routine_id:'synthetic-routine',superset_id:0,custom_metric:45}]);
+    const stored=await sql.query<PartnerWorkout>(`select id,title,notes,started_at::text,ended_at::text,'[]'::json as workout_exercises
+      from public.workouts where id like 'synthetic-partner-%'`);
+    const question='Who do I usually train with?';
+    const [partnerQuery]=planCoachAnalysis(question,'','2026-11-28');
+    const evidence=partnerReply(stored.rows,partnerQuery,question,'',false);
+    expect(evidence.text).toContain('**Alex** — 2 workouts');
+    expect(evidence.text).not.toContain('Jamie');
+    expect(evidence.evidence.dates).toEqual(['2026-11-08','2026-11-06']);
     expect((await sql.query('select public.acquire_sync($1) as granted',[owner])).rows).toEqual([{granted:true}]);
     expect((await sql.query('select public.acquire_sync($1) as granted',[other])).rows).toEqual([{granted:false}]);
     expect((await sql.query("select public.finish_sync($1,now(),null) as finished",[other])).rows).toEqual([{finished:false}]);
