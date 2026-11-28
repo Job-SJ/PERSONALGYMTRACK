@@ -16,6 +16,7 @@ const entries=[{id:'40000000-0000-4000-8000-000000000004',day:today,meal:'Lunch'
 const factors=[{id:factorId,status:'verified',factor_type:'totp',friendly_name:'Synthetic factor',created_at:created,updated_at:created}];
 const coachConversations=new Map();
 const coachTurns=new Map();
+const confirmedFoods=new Map();
 const account=(id)=>({id,aud:'authenticated',role:'authenticated',email:id===userOne?'one@example.invalid':'two@example.invalid',created_at:created,
   app_metadata:{provider:'email'},user_metadata:{},factors:id===userTwo?factors:[]});
 const base=(value)=>Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -40,7 +41,7 @@ function rows(table,id){
   if(table==='preferences') return [{theme:isOne?'dark':'light'}];
   if(table==='exercise_templates') return [template];
   if(table==='sync_state') return [];
-  if(table==='nutrition_entries') return isOne?entries:[];
+  if(table==='nutrition_entries') return [...(isOne?entries:[]),...[...confirmedFoods.values()].filter(row=>row.user_id===id)];
   if(table==='nutrition_days') return [];
   if(table==='body_measurements') return [{id:'fixture-weight',day:on(-1),kind:'weight',source:'manual',value:isOne?82:61}];
   if(table==='workouts') return Array.from({length:isOne?12:3},(_,index)=>({
@@ -105,6 +106,15 @@ if(process.env.PGT_FIXTURE_LISTEN==='1'){
         return send(200,[]);
       }
       if(!claims||(claims.sub===userTwo&&claims.aal!=='aal2')) return send(403,{code:'42501',message:'Access denied'});
+      if(table==='nutrition_entries'&&request.method==='POST'&&filters.get('on_conflict')==='user_id,id'&&
+        request.headers.prefer?.includes('resolution=ignore-duplicates')){
+        if(!Array.isArray(body)||body.some(row=>row.user_id!==claims.sub)) return send(403,{code:'42501',message:'Access denied'});
+        for(const row of body){
+          const key=row.user_id+':'+row.id;
+          if(!confirmedFoods.has(key)) confirmedFoods.set(key,{...row,created_at:created});
+        }
+        return send(201,[]);
+      }
       if(table==='coach_conversations'){
         return send(200,[...coachConversations.values()].filter(row=>row.user_id===claims.sub&&(!recordId||row.id===recordId)));
       }

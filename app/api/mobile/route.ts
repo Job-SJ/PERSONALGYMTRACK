@@ -2,8 +2,10 @@ import {z} from 'zod';
 import {apiSession,privateJson,readJson} from '../../../lib/api-session';
 import {bestRecords,dayKey,shiftDay,workoutMetrics} from '../../../lib/analytics';
 import {dailyIntelligence} from '../../../lib/daily-intelligence';
-import {integrationCredentials} from '../../../lib/integration-credentials';
-import {lookupFoods,writeNutrition} from '../../../lib/nutrition-service';
+import {credentialsConfigured,integrationCredentials} from '../../../lib/integration-credentials';
+import {connectHevy} from '../../../lib/hevy-connection';
+import {lookupFoods,previewMeal,writeNutrition} from '../../../lib/nutrition-service';
+import {maxMealText} from '../../../lib/meal-preview';
 import {runSync} from '../../../lib/sync';
 import {HevyError} from '../../../lib/hevy';
 import type {Entry,Target} from '../../../lib/nutrition';
@@ -41,7 +43,7 @@ export async function GET(request:Request){
         return {id:row.id,title:row.title,day:dayKey(row.started_at),sets,volume,minutes};
       }),weight:weights.map(({day,value})=>({day,value})),headlines:report.indicators.map(({label,value})=>({label,value})),
       summary:report.headline,entries:(nutrition.data??[]) as Entry[],target:target.data as Target|null,
-      complete:Boolean(complete.data),theme:prefs.data?.theme??'dark',hevyConnected,
+      complete:Boolean(complete.data),theme:prefs.data?.theme??'dark',hevyConnected,hevyAvailable:credentialsConfigured(),
     };
     return privateJson(overview);
   }catch{return privateJson({error:'The mobile workspace could not be loaded.'},503);}
@@ -50,9 +52,11 @@ export async function GET(request:Request){
 const commands=z.discriminatedUnion('action',[
   z.object({action:z.literal('nutrition'),command:z.unknown()}),
   z.object({action:z.literal('food-search'),mode:z.enum(['name','brand','barcode']),query:z.string().trim().min(2).max(80)}),
+  z.object({action:z.literal('meal-preview'),text:z.string().trim().min(1).max(maxMealText)}),
   z.object({action:z.literal('weight'),day:z.iso.date(),kg:z.number().positive().max(700)}),
   z.object({action:z.literal('theme'),theme:z.enum(['dark','light','oled'])}),
   z.object({action:z.literal('sync')}),
+  z.object({action:z.literal('connect-hevy'),key:z.string().trim().min(8).max(512)}),
 ]);
 
 export async function POST(request:Request){
@@ -72,6 +76,10 @@ export async function POST(request:Request){
         const result=await lookupFoods(command.mode,command.query);
         return privateJson(result,result.error?502:200);
       }
+      case 'meal-preview':{
+        const result=await previewMeal(command.text);
+        return privateJson(result,result.error?400:200);
+      }
       case 'weight':{
         if(command.day>dayKey(new Date())) return privateJson({error:'Choose today or a past date.'},400);
         const insert=await client.from('body_measurements').insert({user_id:user.id,day:command.day,kind:'weight',value:command.kg,source:'manual'});
@@ -89,6 +97,12 @@ export async function POST(request:Request){
         const key=await integrationCredentials(auth.session,'hevy').read();
         if(!key) return privateJson({error:'Connect Hevy in the web workspace first.'},400);
         await runSync(client,user.id,key);
+        break;
+      }
+      case 'connect-hevy':{
+        const key=await connectHevy(auth.session,command.key,request.signal);
+        try{await runSync(client,user.id,key);}
+        catch{return privateJson({ok:true,notice:'Hevy connected. Use Sync workouts to retry the initial import.'});}
         break;
       }
     }

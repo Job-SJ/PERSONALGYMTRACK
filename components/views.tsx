@@ -283,13 +283,30 @@ export function GoalView({goals,workouts,rows,preview=false}:{goals:Goal[];worko
   }):<Empty>No goals created.</Empty>}</Card><Card title="Create a goal">{preview?<Empty>Sign in to create a goal.</Empty>:<form className="form" action={goal}><label>Title<input name="title" maxLength={100} required/></label><label>Metric<select name="kind"><option value="workouts">Workout count</option><option value="weekly_workouts">Workouts per week</option><option value="weight">Bodyweight (kg)</option></select></label><label>Target<input type="number" name="target" min=".01" step=".01" required/></label><label>Deadline<input type="date" name="deadline"/></label><button className="button">Create goal</button></form>}</Card></div></>;
 }
 export function IntegrationView({available,syncAt,lastError,canConfigure=false,preview=false}:{canConfigure?:boolean;available:boolean;syncAt:string|null;lastError?:string|null;preview?:boolean}){
-  return <><Heading section="WORKSPACE" title="Integrations" description="Bring your training history into your private workspace."/><div className="split"><Card title="Hevy" subtitle={syncAt?'Last successful sync · '+new Date(syncAt).toLocaleString('en-GB',{timeZone:'Europe/Amsterdam'}):'No successful synchronization yet'}>{available?<><p className="muted">Synchronize workout history and exercise templates from Hevy Pro.</p><HevySyncForm/></>:<Empty>Connect your Hevy Pro account to synchronize workouts.</Empty>}{canConfigure&&<><form className="form" action={configureHevy}>
-      <label>Hevy API key<input type="password" name="key" autoComplete="off" required minLength={8} maxLength={512}/></label>
-      <button className="button secondary" name="mode" value="connect">{available?'Test and replace key':'Test and connect'}</button>
-    </form>{available&&<form className="inline" action={configureHevy}>
-      <button className="quiet" name="mode" value="migrate">Re-encrypt current key</button>
-      <button className="quiet" name="mode" value="disconnect">Disconnect Hevy</button>
-    </form>}</>}{!canConfigure&&!preview&&<small>Personal credentials require server-side vault configuration.</small>}{lastError&&<p role="status">{lastError}</p>}</Card><Card title="Import a Hevy CSV" subtitle="Use a workout export under 1.5 MB.">{preview?<Empty>Configure Supabase and sign in to import a file.</Empty>:<form className="form" action={importCsv}><label>Workout export<input type="file" name="csv" accept=".csv,text/csv" required/></label><button className="button">Import CSV</button><small>CSV records use a separate exercise namespace. Importing the same history through both sources can duplicate sessions.</small></form>}</Card></div></>;
+  const connection=canConfigure&&<form className="form" action={configureHevy}>
+    <label>Hevy API key<input type="password" name="key" autoComplete="off" required minLength={8} maxLength={512}/></label>
+    <button className="button" name="mode" value="connect">{available?'Replace key':'Connect and sync'}</button>
+  </form>;
+  return <><Heading section="WORKSPACE" title="Integrations" description="Bring your training history into your private workspace."/>
+    <Card title="Hevy" subtitle={syncAt?'Last successful sync · '+new Date(syncAt).toLocaleString('en-GB',{timeZone:'Europe/Amsterdam'}):undefined}>
+      {available?<HevySyncForm/>:connection||<Empty>Connect a Hevy Pro account to synchronize workouts.</Empty>}
+      {available&&canConfigure&&<details className="disclosure"><summary>Manage connection</summary>
+        {connection}<form className="inline" action={configureHevy}>
+          <button className="quiet" name="mode" value="migrate">Re-encrypt current key</button>
+          <button className="quiet" name="mode" value="disconnect">Disconnect Hevy</button>
+        </form>
+      </details>}
+      {!canConfigure&&!preview&&<small>Personal credentials require server-side vault configuration.</small>}
+      {lastError&&<p role="status">{lastError}</p>}
+    </Card>
+    <details className="panel disclosure"><summary>Import a Hevy CSV</summary>
+      {preview?<Empty>Configure Supabase and sign in to import a file.</Empty>:<form className="form" action={importCsv}>
+        <label>Workout export<input type="file" name="csv" accept=".csv,text/csv" required/></label>
+        <button className="button" type="submit">Import CSV</button>
+        <small>Use an export under 1.5 MB. Importing the same history through both sources can duplicate sessions.</small>
+      </form>}
+    </details>
+  </>;
 }
 export function SettingsView({theme,email,locale='en-GB',mfaEnabled=false,preview=false}:{theme:string;locale?:Locale;email?:string;mfaEnabled?:boolean;preview?:boolean}){
   return <><Heading section="WORKSPACE" title="Settings" description="Manage your account and appearance."><Link className="quiet" href={preview?'/?tab=integrations':'/app/integrations'}><Plug size={15}/>Integrations</Link></Heading><div className="split"><Card title="Appearance">{preview?<Empty>Sign in to save appearance preferences.</Empty>:<form className="form" action={preferences}><label>Theme<select name="theme" defaultValue={theme}><option value="dark">Charcoal</option><option value="oled">OLED black</option><option value="light">Light</option></select></label><label>Number and date format<select name="locale" defaultValue={locale}><option value="en-GB">English (United Kingdom)</option><option value="nl-NL">Nederlands (Nederland)</option></select></label><button className="button">Save appearance</button></form>}</Card><Card title="Account" subtitle={email}>{preview?<Empty>Configure Supabase to enable invite-only access.</Empty>:<><form className="form" action={setPassword}><label>New password<input name="password" type="password" minLength={12} maxLength={72} autoComplete="new-password" required/></label><button className="button secondary">Update password</button></form><MfaEnrollment enabled={mfaEnabled}/><div className="inline"><Link className="quiet" href="/app/notifications">Notifications</Link><Link className="quiet" href="/app/coach">Coach</Link><Link className="quiet" href="/app/export">Export JSON</Link><SignOut/></div></>}</Card></div></>;

@@ -22,7 +22,7 @@ async function coachRequest<T>(signal:AbortSignal,payload?:object):Promise<T>{
   return json;
 }
 
-export function Coach(){
+export function Coach({today}:{today:string}){
   const [status,setStatus]=useState<Status>();
   const [error,setError]=useState('');
   const [message,setMessage]=useState('');
@@ -119,10 +119,10 @@ export function Coach(){
         });
       }}><label className="coach-consent"><input type="checkbox" required/> {chatConsent}</label>
         <button className="button" disabled={busy}>Enable conversational chat</button></form>}
-      {(!model||status.setting?.enabled)&&<form className="form" onSubmit={discover}>
-        {status.instance&&<label>Connection<select value={source} disabled={busy} onChange={event=>{setSource(event.target.value as typeof source);setModels([]);}}>
+      {!model&&<form className="form" onSubmit={discover}>
+        {status.instance&&<details><summary>Connection options</summary><label>Connection<select value={source} disabled={busy} onChange={event=>{setSource(event.target.value as typeof source);setModels([]);}}>
           <option value="personal">My OpenRouter key</option><option value="instance">Instance key</option>
-        </select></label>}
+        </select></label></details>}
         {source==='personal'&&<label>{status.personal?'Replacement key (optional)':'OpenRouter API key'}
           <input ref={formKey} type="password" autoComplete="off" maxLength={512} required={!status.personal}/>
         </label>}
@@ -161,7 +161,7 @@ export function Coach(){
       </details>}
     </section>}
     {busy&&<div className="inline" role="status"><span>Updating settings?</span><button className="quiet" onClick={()=>controller.current?.abort()}>Cancel</button></div>}
-    {status&&!readiness&&!setup&&<CoachChat key={chatVersion} blocked={busy||loading}/>}
+    {status&&!readiness&&!setup&&<CoachChat key={chatVersion} today={today} blocked={busy||loading}/>}
     {status&&status.history.length>0&&<details className="panel coach-panel"><summary>Earlier Coach replies</summary>
       {status.history.map(reply=><article key={reply.id}><h2>{topics[reply.topic]}</h2><CoachMarkdown text={reply.answer}/></article>)}
     </details>}

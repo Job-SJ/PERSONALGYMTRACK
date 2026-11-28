@@ -6,6 +6,8 @@ import type {Session} from '@supabase/supabase-js';
 import {chatConsent,chatSuggestions,type ChatCommand} from '../lib/coach-chat';
 import {useCoachChat} from '../lib/coach-chat-client';
 import {coachMarkdown} from '../lib/coach-markdown';
+import {isMealLogMessage} from '../lib/meal-preview';
+import {MobileMealPreview} from './MealPreview';
 import {topics,type Topic} from '../lib/coach-topics';
 import {reserveMicros,type CoachDiscovery,type CoachModel} from '../lib/coach-provider';
 import {coachReadiness,defaultCoachBudget,recommendCoachModels,type CoachConnectionIssue} from '../lib/coach-setup';
@@ -23,7 +25,7 @@ function Markdown({value,p}:{value:string;p:Palette}){
   </Text>)}</View>;
 }
 
-export function MobileCoach({session,p}:{session:Session;p:Palette}){
+export function MobileCoach({session,p,today,refreshDiary}:{session:Session;p:Palette;today?:string;refreshDiary:()=>void}){
   const transport=useCallback(async(command:ChatCommand,signal:AbortSignal)=>{
     if(!validOrigin(appUrl)) throw new Error('Configure an HTTPS GymTrack workspace URL.');
     const request={method:'POST',signal,redirect:'error' as const,headers:{
@@ -33,7 +35,9 @@ export function MobileCoach({session,p}:{session:Session;p:Palette}){
   },[session.access_token]);
   const chat=useCoachChat(transport,uuid.v4,true);
   const scroll=useRef<ComponentRef<typeof ScrollView>>(null);
+  const followLog=useRef(true);
   const [draft,setDraft]=useState('');
+  const [mealText,setMealText]=useState('');
   const [rename,setRename]=useState<string>();
   const [list,setList]=useState(false);
   const [remove,setRemove]=useState(false);
@@ -72,7 +76,7 @@ export function MobileCoach({session,p}:{session:Session;p:Palette}){
       .finally(()=>{if(!abort.signal.aborted) setChecking(false);});
     return ()=>abort.abort();
   },[session]);
-  useEffect(()=>{if(!setup&&!list) scroll.current?.scrollToEnd({animated:false});},[chat.turns,chat.partial,setup,list]);
+  useEffect(()=>{if(!setup&&!list&&followLog.current) scroll.current?.scrollToEnd({animated:false});},[chat.turns,chat.partial,setup,list,mealText]);
   async function refresh(){
     setChecking(true);setNotice('');
     try{setStatus(await mobileRequest<Status>(session,'/api/coach'));}
@@ -108,8 +112,12 @@ export function MobileCoach({session,p}:{session:Session;p:Palette}){
         if(!setup) void refresh();
       }}/>
     </View>
-    <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{gap:12,paddingVertical:6}}
-      onContentSizeChange={()=>{if(chat.generating) scroll.current?.scrollToEnd({animated:false});}}>
+    <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" indicatorStyle={p.onAccent==='#fff'?'black':'white'} contentContainerStyle={{gap:12,paddingVertical:6}}
+      onScroll={event=>{
+        const {contentOffset,contentSize,layoutMeasurement}=event.nativeEvent;
+        followLog.current=contentSize.height-contentOffset.y-layoutMeasurement.height<64;
+      }} scrollEventThrottle={16}
+      onContentSizeChange={()=>{if(chat.generating&&followLog.current) scroll.current?.scrollToEnd({animated:false});}}>
       {notice&&<Text accessibilityLiveRegion="polite" style={caption}>{notice}</Text>}
       {ready&&chat.error&&<Text accessibilityLiveRegion="polite" style={caption}>{chat.error}</Text>}
       {setup?<View style={[ui.panel,{borderColor:p.line}]}>
@@ -179,7 +187,7 @@ export function MobileCoach({session,p}:{session:Session;p:Palette}){
           <Button p={p} text="Confirm deletion" disabled={disabled} action={()=>{chat.remove();setRemove(false);}}/>
           <Button p={p} text="Cancel" action={()=>setRemove(false)}/>
         </View>}
-        {!chat.turns.length&&<>
+        {!mealText&&!chat.turns.length&&<>
           <Text style={[ui.section,{color:p.text}]}>What would you like to work on?</Text>
           {ready?chatSuggestions().map(question=><Button key={question} p={p} text={question} disabled={disabled} action={()=>setDraft(question)}/>):
             <Button p={p} text="Open Coach settings" action={()=>setSetup(true)}/>}
@@ -195,18 +203,23 @@ export function MobileCoach({session,p}:{session:Session;p:Palette}){
         </View>)}
         {chat.loading&&<Text style={caption}>Loading conversations…</Text>}
         {chat.generating&&!chat.partial&&<Text style={caption}>Coach is preparing a reply…</Text>}
-        {ready&&chat.turns.at(-1)?.answer&&!disabled&&!draft&&<View style={ui.row}>
+        {ready&&!mealText&&chat.turns.at(-1)?.answer&&!disabled&&!draft&&<View style={ui.row}>
           {chatSuggestions(chat.turns.at(-1)?.prompt).slice(0,2).map(question=><Button key={question} p={p} text={question} action={()=>setDraft(question)}/>)}
         </View>}
         {ready&&chat.turns.length>0&&!chat.turns.at(-1)?.answer&&!chat.busy&&<Button p={p} text="Retry reply" action={chat.retry}/>}
+        {mealText&&today&&<MobileMealPreview day={today} session={session} p={p} refresh={refreshDiary} initialText={mealText} close={()=>setMealText('')}/>}
       </>}
     </ScrollView>
-    {ready&&!setup&&!list&&<>
+    {ready&&!setup&&!list&&!mealText&&<>
       <View style={[ui.row,{flexWrap:'nowrap'}]}>
         <TextInput accessibilityLabel="Message Coach" multiline editable={ready} maxLength={1800} style={[...input,{flex:1,maxHeight:110}]}
           placeholder="Ask about your fitness…" placeholderTextColor={p.muted} value={draft} onChangeText={setDraft}/>
         {chat.generating?<Button p={p} text="Stop" action={chat.stop}/>:<Button p={p} accent text="Send" disabled={!ready||disabled||!draft.trim()}
-          action={()=>chat.send(draft,()=>setDraft(''))}/>}
+          action={()=>{
+            followLog.current=true;
+            if(today&&isMealLogMessage(draft)){setMealText(draft);setDraft('');}
+            else chat.send(draft,()=>setDraft(''));
+          }}/>}
       </View>
       <Text style={[caption,{fontSize:12,lineHeight:16,paddingBottom:6}]}>Your selected AI provider processes your typed messages and recent conversation context.</Text>
     </>}
