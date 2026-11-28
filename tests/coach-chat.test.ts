@@ -1,5 +1,5 @@
 import {expect,it,vi} from 'vitest';
-import {chatSchema,conversationContext,validChatPrompt,type ChatTurn} from '../lib/coach-chat';
+import {chatSchema,coachPrivacy,conversationContext,validChatPrompt,type ChatTurn} from '../lib/coach-chat';
 import {readChatResponse} from '../lib/coach-chat-client';
 import {coachMarkdown} from '../lib/coach-markdown';
 import {coachInputBytes,openRouter} from '../lib/coach-provider';
@@ -36,6 +36,15 @@ it('requires explicit consent and rejects likely secrets and oversized UTF-8 mes
   expect(validChatPrompt('sk-or-v1-'+'x'.repeat(32))).toBe(false);
   expect(validChatPrompt('é'.repeat(901))).toBe(false);
   expect(validChatPrompt('Compare my lifts')).toBe(true);
+});
+
+it('uses temporary partner references and restores a preferred name locally',()=>{
+  const prior={...turn('local','Who do I usually train with?','@synthetic_partner after 3 workouts.'),local_analysis:true};
+  const privacy=coachPrivacy('Did @Synthetic_Partner help, Sam?', [prior], 'Sam');
+  const context=conversationContext('{}',[prior],'Did @Synthetic_Partner help, Sam?',{privacy});
+  expect(JSON.stringify(context)).not.toMatch(/synthetic_partner|\bSam\b|3 workouts/i);
+  expect(context.messages.at(-1)?.content).toBe('Did Partner 1 help, [athlete]?');
+  expect(privacy.restore('Partner 1 was tagged in those workouts, [athlete].')).toBe('@synthetic_partner was tagged in those workouts, Sam.');
 });
 
 it('streams content with usage while retaining paid routing caps and sending neither identifiers nor tools',async()=>{

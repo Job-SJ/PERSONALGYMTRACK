@@ -42,6 +42,9 @@ function rows(table,id){
   if(table==='exercise_templates') return [template];
   if(table==='sync_state') return [];
   if(table==='nutrition_entries') return [...(isOne?entries:[]),...[...confirmedFoods.values()].filter(row=>row.user_id===id)];
+  if(table==='nutrition_library') return isOne?[
+    {id:'fixture-oats',kind:'food',name:'Synthetic oat bowl',servings:1,portions:[entries[0].portion]},
+  ]:[];
   if(table==='nutrition_days') return [];
   if(table==='body_measurements') return [{id:'fixture-weight',day:on(-1),kind:'weight',source:'manual',value:isOne?82:61}];
   if(table==='workouts') return Array.from({length:isOne?12:3},(_,index)=>({
@@ -85,13 +88,13 @@ if(process.env.PGT_FIXTURE_LISTEN==='1'){
           return send(200,body.cost_micros===0?'50000000-0000-4000-8000-000000000005':null);
         }
         if(table==='coach_settings'&&(owner===userOne||owner===userTwo)) return send(200,[{
-          enabled:true,consent_at:created,chat_consent_at:created,credential_source:'personal',model:'synthetic/free',
+          enabled:true,consent_at:created,chat_consent_at:created,credential_source:'instance',model:owner===userOne?'synthetic/free':'synthetic/fallback',
           endpoint:'synthetic',prompt_price:0,completion_price:0,monthly_micros:0,revision:'60000000-0000-4000-8000-000000000006',
         }]);
         if(table==='coach_conversations'||table==='coach_turns'){
           const records=table==='coach_conversations'?coachConversations:coachTurns;
           if(request.method==='POST'){
-            const record={title:'New chat',updated_at:created,created_at:created,answer:null,...body};
+            const record={title:'New chat',updated_at:created,created_at:new Date(Date.parse(created)+records.size).toISOString(),answer:null,...body};
             records.set(record.id,record);
             return send(201,objectResponse?record:[record]);
           }
@@ -101,6 +104,7 @@ if(process.env.PGT_FIXTURE_LISTEN==='1'){
           const attempt=filters.get('attempt')?.match(/^eq\.(.*)$/)?.[1];
           if(attempt) selected=selected.filter(row=>row.attempt===attempt);
           if(request.method==='PATCH'&&!filters.get('started_at')?.startsWith('lt.')) for(const row of selected) Object.assign(row,body);
+          if(filters.get('order')?.startsWith('created_at.desc')) selected.sort((a,b)=>b.created_at.localeCompare(a.created_at));
           return send(200,objectResponse?selected[0]??null:selected);
         }
         return send(200,[]);
@@ -135,7 +139,14 @@ if(process.env.PGT_FIXTURE_LISTEN==='1'){
         response.setHeader('Content-Range',`${offset}-${offset+selected.length-1}/${records.length}`);
         return send(200,selected);
       }
-      return send(200,rows(table,claims.sub));
+      const records=rows(table,claims.sub);
+      const inRange=(row,key)=>filters.getAll(key).every(filter=>{
+        const [operator,...rest]=filter.split('.');
+        const value=rest.join('.');
+        return operator==='gte'?row[key]>=value:operator==='lte'?row[key]<=value:operator==='lt'?row[key]<value:true;
+      });
+      const filtered=records.filter(row=>inRange(row,'started_at')&&inRange(row,'day'));
+      return send(200,filtered.slice(0,Number(filters.get('limit')??filtered.length)));
     }
     return send(404,{message:'Synthetic endpoint unavailable'});
   });

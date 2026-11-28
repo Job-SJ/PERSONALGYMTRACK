@@ -1,19 +1,19 @@
-import {reserveMicros,type CoachModel} from './coach-provider';
+import {reserveChatMicros,type CoachModel} from './coach-provider';
 
 export const defaultCoachBudget=2;
 
 export function recommendCoachModels(models:CoachModel[]){
-  const scores=(model:CoachModel)=>Number(model.capabilities.includes('tools')&&model.capabilities.includes('tool_choice'))+
+  const scores=(model:CoachModel)=>Number(model.capabilities.includes('tools'))+
     Number(model.capabilities.includes('reasoning'));
-  const sorted=[...models].sort((a,b)=>scores(b)-scores(a)||reserveMicros(a)-reserveMicros(b)||
+  const sorted=[...models].sort((a,b)=>scores(b)-scores(a)||reserveChatMicros(a)-reserveChatMicros(b)||
     (a.medianLatency??Infinity)-(b.medianLatency??Infinity));
   const byModel=new Map<string,CoachModel>();
   for(const model of sorted) if(!byModel.has(model.model)) byModel.set(model.model,model);
   const grouped=[...byModel.values()];
-  const affordable=grouped.filter(model=>reserveMicros(model)<=defaultCoachBudget*1_000_000);
+  const affordable=grouped.filter(model=>reserveChatMicros(model)<=defaultCoachBudget*1_000_000);
   const paid=affordable.filter(model=>!model.free);
   const recommended=affordable[0]??grouped[0];
-  const value=[...paid].sort((a,b)=>reserveMicros(a)-reserveMicros(b)).find(model=>model!==recommended);
+  const value=[...paid].sort((a,b)=>reserveChatMicros(a)-reserveChatMicros(b)).find(model=>model!==recommended);
   const advanced=paid.find(model=>model!==recommended&&model!==value&&scores(model)>0);
   const free=affordable.find(model=>model.free&&model!==recommended);
   return {grouped,featured:[

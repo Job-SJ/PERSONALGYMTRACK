@@ -5,8 +5,11 @@ import {useMealPreview} from '../lib/meal-preview-client';
 import {maxMealText,mealPreviewTotals,type MealPreview} from '../lib/meal-preview';
 import {meals,unitsFor,type Meal,type Portion} from '../lib/nutrition';
 
-export function MealPreviewForm({day,meal,disabled,initialText,close}:{day:string;meal?:Meal;disabled:boolean;initialText?:string;close?:()=>void}){
-  const draft=useMealPreview({day,meal,initialText,randomId:()=>crypto.randomUUID(),
+export function MealPreviewForm({day,meal,disabled,initialText,initialPreview,requestId,onSaved,onDraftChange,onConfirmationLock,close}:{
+  day:string;meal?:Meal;disabled:boolean;initialText?:string;initialPreview?:MealPreview;requestId?:string;onSaved?:()=>void;close?:()=>void;
+  onDraftChange?:(description:string)=>void;onConfirmationLock?:(locked:boolean)=>void;
+}){
+  const draft=useMealPreview({day,meal,initialText,initialPreview,onSaved,onDraftChange,onConfirmationLock,randomId:()=>requestId??crypto.randomUUID(),
     async preview(text){
       const response=await fetch('/api/mobile',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'meal-preview',text})});

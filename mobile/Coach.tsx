@@ -6,10 +6,9 @@ import type {Session} from '@supabase/supabase-js';
 import {chatConsent,chatSuggestions,type ChatCommand} from '../lib/coach-chat';
 import {useCoachChat} from '../lib/coach-chat-client';
 import {coachMarkdown} from '../lib/coach-markdown';
-import {isMealLogMessage} from '../lib/meal-preview';
 import {MobileMealPreview} from './MealPreview';
 import {topics,type Topic} from '../lib/coach-topics';
-import {reserveMicros,type CoachDiscovery,type CoachModel} from '../lib/coach-provider';
+import {reserveChatMicros,type CoachDiscovery,type CoachModel} from '../lib/coach-provider';
 import {coachReadiness,defaultCoachBudget,recommendCoachModels,type CoachConnectionIssue} from '../lib/coach-setup';
 import {appUrl,mobileRequest,validOrigin} from './session';
 import {Button,ui,type Palette} from './ui';
@@ -25,7 +24,7 @@ function Markdown({value,p}:{value:string;p:Palette}){
   </Text>)}</View>;
 }
 
-export function MobileCoach({session,p,today,refreshDiary}:{session:Session;p:Palette;today?:string;refreshDiary:()=>void}){
+export function MobileCoach({session,p,refreshDiary}:{session:Session;p:Palette;refreshDiary:()=>void}){
   const transport=useCallback(async(command:ChatCommand,signal:AbortSignal)=>{
     if(!validOrigin(appUrl)) throw new Error('Configure an HTTPS GymTrack workspace URL.');
     const request={method:'POST',signal,redirect:'error' as const,headers:{
@@ -37,7 +36,6 @@ export function MobileCoach({session,p,today,refreshDiary}:{session:Session;p:Pa
   const scroll=useRef<ComponentRef<typeof ScrollView>>(null);
   const followLog=useRef(true);
   const [draft,setDraft]=useState('');
-  const [mealText,setMealText]=useState('');
   const [rename,setRename]=useState<string>();
   const [list,setList]=useState(false);
   const [remove,setRemove]=useState(false);
@@ -62,7 +60,7 @@ export function MobileCoach({session,p,today,refreshDiary}:{session:Session;p:Pa
   const readiness=status?coachReadiness(status):null;
   const ready=Boolean(status&&!readiness);
   const {featured}=recommendCoachModels(models);
-  const disabled=working||chat.busy;
+  const disabled=working||chat.busy||chat.confirmingMeal;
   const input=[ui.input,{color:p.text,borderColor:p.line}];
   const caption=[ui.text,{color:p.muted}];
   useEffect(()=>{
@@ -76,7 +74,7 @@ export function MobileCoach({session,p,today,refreshDiary}:{session:Session;p:Pa
       .finally(()=>{if(!abort.signal.aborted) setChecking(false);});
     return ()=>abort.abort();
   },[session]);
-  useEffect(()=>{if(!setup&&!list&&followLog.current) scroll.current?.scrollToEnd({animated:false});},[chat.turns,chat.partial,setup,list,mealText]);
+  useEffect(()=>{if(!setup&&!list&&followLog.current) scroll.current?.scrollToEnd({animated:false});},[chat.turns,chat.partial,setup,list,chat.activeMeal]);
   async function refresh(){
     setChecking(true);setNotice('');
     try{setStatus(await mobileRequest<Status>(session,'/api/coach'));}
@@ -152,7 +150,7 @@ export function MobileCoach({session,p,today,refreshDiary}:{session:Session;p:Pa
           <Text style={caption}>{chatConsent}</Text>
           <Button p={p} text={consent?'Consent confirmed':'I agree'} accent={consent} disabled={working} action={()=>setConsent(!consent)}/>
           <Button p={p} text="Enable chat" disabled={working||!consent||Boolean(model&&!model.free&&(!approved||!budget.trim()||!(Number(budget)>=0&&Number(budget)<=50)||
-            reserveMicros(model)>Number(budget)*1_000_000))} action={()=>void configure(model?
+            reserveChatMicros(model)>Number(budget)*1_000_000))} action={()=>void configure(model?
             {action:'enable',source,selection:model,monthlyUsd:model.free?0:Number(budget),consent:true,chatConsent:true}:{action:'chat-consent',consent:true})}/>
         </>}
         {status?.setting?.enabled&&<Button p={p} text="Disable Coach" disabled={working} action={()=>void configure({action:'disable'})}/>}
@@ -187,15 +185,15 @@ export function MobileCoach({session,p,today,refreshDiary}:{session:Session;p:Pa
           <Button p={p} text="Confirm deletion" disabled={disabled} action={()=>{chat.remove();setRemove(false);}}/>
           <Button p={p} text="Cancel" action={()=>setRemove(false)}/>
         </View>}
-        {!mealText&&!chat.turns.length&&<>
+        {!chat.turns.length&&<>
           <Text style={[ui.section,{color:p.text}]}>What would you like to work on?</Text>
-          {ready?chatSuggestions().map(question=><Button key={question} p={p} text={question} disabled={disabled} action={()=>setDraft(question)}/>):
+          {ready?chatSuggestions.map(question=><Button key={question} p={p} text={question} disabled={disabled} action={()=>setDraft(question)}/>):
             <Button p={p} text="Open Coach settings" action={()=>setSetup(true)}/>}
         </>}
         {chat.turns.map((turn,index)=><View key={turn.id} style={{gap:8}}>
           <Text style={[ui.text,{color:p.text,backgroundColor:p.panel,borderRadius:14,padding:10,alignSelf:'flex-end',maxWidth:'90%'}]}>{turn.prompt}</Text>
           {turn.answer?<Markdown value={turn.answer} p={p}/>:index===chat.turns.length-1&&chat.partial?<Markdown value={chat.partial} p={p}/>:null}
-          {turn.evidence&&<View style={{alignItems:'flex-start'}}>
+          {turn.evidence&&!turn.evidence.mealDraft&&<View style={{alignItems:'flex-start'}}>
             <Button p={p} text={evidence===turn.id?'Hide evidence':'Supporting evidence'} action={()=>setEvidence(evidence===turn.id?undefined:turn.id)}/>
             {evidence===turn.id&&<Text style={caption}>{turn.evidence.details?.length?
               [turn.evidence.label,...turn.evidence.details].join('\n\n'):[turn.evidence.label,...turn.evidence.dates].join(' · ')}</Text>}
@@ -203,22 +201,21 @@ export function MobileCoach({session,p,today,refreshDiary}:{session:Session;p:Pa
         </View>)}
         {chat.loading&&<Text style={caption}>Loading conversations…</Text>}
         {chat.generating&&!chat.partial&&<Text style={caption}>Coach is preparing a reply…</Text>}
-        {ready&&!mealText&&chat.turns.at(-1)?.answer&&!disabled&&!draft&&<View style={ui.row}>
-          {chatSuggestions(chat.turns.at(-1)?.prompt).slice(0,2).map(question=><Button key={question} p={p} text={question} action={()=>setDraft(question)}/>)}
-        </View>}
-        {ready&&chat.turns.length>0&&!chat.turns.at(-1)?.answer&&!chat.busy&&<Button p={p} text="Retry reply" action={chat.retry}/>}
-        {mealText&&today&&<MobileMealPreview day={today} session={session} p={p} refresh={refreshDiary} initialText={mealText} close={()=>setMealText('')}/>}
+        {ready&&chat.turns.length>0&&!chat.turns.at(-1)?.answer&&!chat.busy&&<Button p={p} text="Retry reply" disabled={disabled} action={chat.retry}/>}
+        {chat.activeMeal&&<MobileMealPreview key={chat.activeMeal.id} day={chat.activeMeal.draft.day} requestId={chat.activeMeal.id}
+          session={session} p={p} refresh={refreshDiary} disabled={working||chat.busy||chat.activeMeal.confirmed}
+          initialText={chat.activeMeal.draft.description} initialPreview={chat.activeMeal.draft.preview}
+          close={chat.dismissMeal} onSaved={chat.confirmMeal} onDraftChange={chat.updateMealDescription} onConfirmationLock={chat.setConfirmingMeal}/>}
       </>}
     </ScrollView>
-    {ready&&!setup&&!list&&!mealText&&<>
+    {ready&&!setup&&!list&&<>
       <View style={[ui.row,{flexWrap:'nowrap'}]}>
         <TextInput accessibilityLabel="Message Coach" multiline editable={ready} maxLength={1800} style={[...input,{flex:1,maxHeight:110}]}
           placeholder="Ask about your fitness…" placeholderTextColor={p.muted} value={draft} onChangeText={setDraft}/>
         {chat.generating?<Button p={p} text="Stop" action={chat.stop}/>:<Button p={p} accent text="Send" disabled={!ready||disabled||!draft.trim()}
           action={()=>{
             followLog.current=true;
-            if(today&&isMealLogMessage(draft)){setMealText(draft);setDraft('');}
-            else chat.send(draft,()=>setDraft(''));
+            chat.send(draft,()=>setDraft(''));
           }}/>}
       </View>
       <Text style={[caption,{fontSize:12,lineHeight:16,paddingBottom:6}]}>Your selected AI provider processes your typed messages and recent conversation context.</Text>

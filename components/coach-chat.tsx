@@ -5,7 +5,6 @@ import {Copy,Check} from 'lucide-react';
 import {chatSuggestions,type ChatCommand} from '../lib/coach-chat';
 import {useCoachChat} from '../lib/coach-chat-client';
 import {coachMarkdown} from '../lib/coach-markdown';
-import {isMealLogMessage} from '../lib/meal-preview';
 import {MealPreviewForm} from './meal-preview';
 
 const transport=(command:ChatCommand,signal:AbortSignal)=>fetch('/api/coach',{signal,cache:'no-store',
@@ -17,25 +16,24 @@ export function CoachMarkdown({text}:{text:string}){
       part.style==='emphasis'?<em key={i}>{part.text}</em>:part.style==='code'?<code key={i}>{part.text}</code>:part.text)}</div>)}</div>;
 }
 
-export function CoachChat({blocked,today}:{blocked:boolean;today:string}){
+export function CoachChat({blocked}:{blocked:boolean}){
   const [draft,setDraft]=useState('');
   const [rename,setRename]=useState<string>();
   const [confirm,setConfirm]=useState(false);
   const [copied,setCopied]=useState<string>();
-  const [mealText,setMealText]=useState('');
   const log=useRef<HTMLDivElement>(null);
   const followLog=useRef(true);
   const composer=useRef<HTMLTextAreaElement>(null);
   const history=useRef<HTMLDetailsElement>(null);
   const chat=useCoachChat(transport,()=>crypto.randomUUID(),true);
-  useEffect(()=>{if(log.current&&followLog.current) log.current.scrollTop=log.current.scrollHeight;},[chat.turns,chat.partial,chat.generating,mealText]);
+  useEffect(()=>{if(log.current&&followLog.current) log.current.scrollTop=log.current.scrollHeight;},[chat.turns,chat.partial,chat.generating,chat.activeMeal]);
   useEffect(()=>{
     const input=composer.current;
     if(!input) return;
     input.style.height='auto';
     input.style.height=Math.min(input.scrollHeight+2,140)+'px';
   },[draft]);
-  const disabled=chat.busy||blocked;
+  const disabled=chat.busy||blocked||chat.confirmingMeal;
   const reset=()=>{followLog.current=true;setDraft('');setRename(undefined);setConfirm(false);};
   return <section className="coach-chat" aria-label="Coach chat">
     <div>
@@ -73,15 +71,15 @@ export function CoachChat({blocked,today}:{blocked:boolean;today:string}){
       const {scrollHeight,scrollTop,clientHeight}=event.currentTarget;
       followLog.current=scrollHeight-scrollTop-clientHeight<64;
     }}>
-      {!mealText&&!chat.turns.length&&<div className="coach-welcome"><h2>What would you like to work on?</h2>
-        <div className="coach-questions">{chatSuggestions().map(question=><button key={question} className="quiet" disabled={disabled}
+      {!chat.turns.length&&<div className="coach-welcome"><h2>What would you like to work on?</h2>
+        <div className="coach-questions">{chatSuggestions.map(question=><button key={question} className="quiet" disabled={disabled}
           onClick={()=>{setDraft(question);composer.current?.focus();}}>{question}</button>)}</div>
       </div>}
       {chat.turns.map((turn,index)=><div className="coach-turn" key={turn.id}>
         <div className="coach-user">{turn.prompt}</div>
         {turn.answer?<CoachMarkdown text={turn.answer}/>:index===chat.turns.length-1&&chat.partial?<CoachMarkdown text={chat.partial}/>:null}
         {turn.answer&&<div className="coach-evidence">
-          {turn.evidence&&<details><summary>Supporting evidence</summary><p>{turn.evidence.label}</p>
+          {turn.evidence&&!turn.evidence.mealDraft&&<details><summary>Supporting evidence</summary><p>{turn.evidence.label}</p>
             {turn.evidence.details?.length?<ul>{turn.evidence.details.map(detail=><li key={detail}>{detail}</li>)}</ul>:
               turn.evidence.dates.length>0&&<p>{turn.evidence.dates.join(' · ')}</p>}</details>}
           <button className="coach-copy" aria-label={copied===turn.id?'Copied':'Copy response'} title="Copy response"
@@ -95,20 +93,17 @@ export function CoachChat({blocked,today}:{blocked:boolean;today:string}){
       </div>)}
       {chat.generating&&!chat.partial&&<p role="status" className="muted">Coach is preparing a reply…</p>}
       {chat.loading&&<p role="status" className="muted">Loading conversations…</p>}
-      {mealText&&<MealPreviewForm day={today} disabled={blocked} initialText={mealText} close={()=>setMealText('')}/>}
+      {chat.activeMeal&&<MealPreviewForm key={chat.activeMeal.id} day={chat.activeMeal.draft.day} requestId={chat.activeMeal.id}
+        disabled={chat.busy||blocked||chat.activeMeal.confirmed} initialText={chat.activeMeal.draft.description} initialPreview={chat.activeMeal.draft.preview}
+        close={chat.dismissMeal} onSaved={chat.confirmMeal} onDraftChange={chat.updateMealDescription} onConfirmationLock={chat.setConfirmingMeal}/>}
     </div>
     {chat.error&&<p className="notice" role="alert">{chat.error}</p>}
-    {!mealText&&chat.turns.at(-1)?.answer&&!chat.busy&&!draft&&<div className="inline coach-followups" aria-label="Suggested follow-ups">
-      {chatSuggestions(chat.turns.at(-1)?.prompt).slice(0,2).map(question=><button type="button" className="quiet"
-        key={question} disabled={blocked} onClick={()=>setDraft(question)}>{question}</button>)}
-    </div>}
-    {chat.turns.length>0&&!chat.turns.at(-1)?.answer&&!chat.busy&&<div><button className="quiet" disabled={blocked} onClick={chat.retry}>Retry reply</button></div>}
-    {!mealText&&<form className="coach-composer" onSubmit={event=>{
+    {chat.turns.length>0&&!chat.turns.at(-1)?.answer&&!chat.busy&&<div><button className="quiet" disabled={disabled} onClick={chat.retry}>Retry reply</button></div>}
+    <form className="coach-composer" onSubmit={event=>{
       event.preventDefault();
       if(disabled) return;
       followLog.current=true;
-      if(isMealLogMessage(draft)){setMealText(draft);setDraft('');}
-      else chat.send(draft,()=>setDraft(''));
+      chat.send(draft,()=>setDraft(''));
     }}>
       <textarea aria-label="Message Coach" placeholder="Ask about your fitness…" value={draft} rows={2} maxLength={1800}
         ref={composer} onChange={event=>setDraft(event.target.value)} onKeyDown={event=>{
@@ -116,6 +111,6 @@ export function CoachChat({blocked,today}:{blocked:boolean;today:string}){
         }}/>
       {chat.generating?<button type="button" className="button secondary" onClick={chat.stop}>Stop</button>:
         <button className="button" disabled={disabled||!draft.trim()}>Send</button>}
-    </form>}
+    </form>
   </section>;
 }

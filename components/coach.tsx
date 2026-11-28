@@ -22,7 +22,7 @@ async function coachRequest<T>(signal:AbortSignal,payload?:object):Promise<T>{
   return json;
 }
 
-export function Coach({today}:{today:string}){
+export function Coach(){
   const [status,setStatus]=useState<Status>();
   const [error,setError]=useState('');
   const [message,setMessage]=useState('');
@@ -161,7 +161,7 @@ export function Coach({today}:{today:string}){
       </details>}
     </section>}
     {busy&&<div className="inline" role="status"><span>Updating settings?</span><button className="quiet" onClick={()=>controller.current?.abort()}>Cancel</button></div>}
-    {status&&!readiness&&!setup&&<CoachChat key={chatVersion} today={today} blocked={busy||loading}/>}
+    {status&&!readiness&&!setup&&<CoachChat key={chatVersion} blocked={busy||loading}/>}
     {status&&status.history.length>0&&<details className="panel coach-panel"><summary>Earlier Coach replies</summary>
       {status.history.map(reply=><article key={reply.id}><h2>{topics[reply.topic]}</h2><CoachMarkdown text={reply.answer}/></article>)}
     </details>}

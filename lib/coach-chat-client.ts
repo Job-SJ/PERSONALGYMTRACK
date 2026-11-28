@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import type {ChatCommand,ChatEvent,ChatTurn,Conversation} from './coach-chat';
 
 type ChatResult={conversations?:Conversation[];conversation?:Conversation;turns?:ChatTurn[];turn?:ChatTurn;error?:string};
@@ -41,6 +41,10 @@ export function useCoachChat(transport:Transport,randomId:()=>string,stream:bool
   const [conversations,setConversations]=useState<Conversation[]>([]);
   const [selected,setSelected]=useState<string>();
   const [turns,setTurns]=useState<ChatTurn[]>([]);
+  const [activeMeal,setActiveMeal]=useState<{id:string;draft:NonNullable<NonNullable<ChatTurn['evidence']>['mealDraft']>;confirmed:boolean}>();
+  const [confirmingMeal,setConfirmingMeal]=useState(false);
+  const mealDescription=useRef('');
+  const updateMealDescription=useCallback((description:string)=>{mealDescription.current=description;},[]);
   const [partial,setPartial]=useState('');
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
@@ -77,24 +81,25 @@ export function useCoachChat(transport:Transport,randomId:()=>string,stream:bool
     void run(async signal=>{
       const result=await request({action:'conversation',id},signal);
       lastSend.current=null;
-      setTurns(result.turns??[]);setSelected(id);
+      setTurns(result.turns??[]);setSelected(id);setActiveMeal(undefined);
     });
   }
   function newChat(){
     if(active.current) return;
     lastSend.current=null;
-    setTurns([]);setSelected(undefined);setError('');
+    setTurns([]);setSelected(undefined);setError('');setActiveMeal(undefined);
   }
   async function generate(command:Extract<ChatCommand,{action:'send'|'retry'}>,signal:AbortSignal,incremental=stream){
     const result=await request({...command,stream:incremental},signal,delta=>setPartial(value=>value+delta));
     if(!result.turn) throw new Error('The response was interrupted. Retry to continue.');
     const turn=result.turn;
+    if(turn.evidence?.mealDraft) setActiveMeal({id:turn.id,draft:turn.evidence.mealDraft,confirmed:false});
     setTurns(rows=>rows.map(row=>row.id===turn.id?turn:row));
     setPartial('');
     setConversations(rows=>[...rows].sort((a,b)=>Number(b.id===command.id)-Number(a.id===command.id)));
   }
   function send(prompt:string,onStarted:()=>void){
-    if(!prompt.trim()||active.current) return;
+    if(!prompt.trim()||active.current||confirmingMeal) return;
     void run(async signal=>{
       let id=selected;
       if(!id){
@@ -105,7 +110,9 @@ export function useCoachChat(transport:Transport,randomId:()=>string,stream:bool
         setSelected(id);
         setConversations(values=>[row,...values]);
       }
-      const command={action:'send',id,turn:randomId(),prompt:prompt.trim()} as const;
+      const mealDraft=activeMeal&&!activeMeal.confirmed?activeMeal.id:undefined;
+      const command={action:'send',id,turn:randomId(),prompt:prompt.trim(),mealDraft,
+        mealDescription:mealDraft&&mealDescription.current?mealDescription.current:undefined} as const;
       lastSend.current=command;
       setTurns(rows=>[...rows,{id:command.turn,prompt:command.prompt,answer:null,created_at:new Date().toISOString()}]);
       onStarted();
@@ -131,12 +138,15 @@ export function useCoachChat(transport:Transport,randomId:()=>string,stream:bool
     void run(async signal=>{
       await request({action:'delete-chat',id:selected},signal);
       setConversations(rows=>rows.filter(row=>row.id!==selected));
-      setSelected(undefined);setTurns([]);
+      setSelected(undefined);setTurns([]);setActiveMeal(undefined);
     });
   }
   function clear(){
     setConversations([]);newChat();
   }
-  return {conversations,conversation,turns,partial,error,busy,generating,loading,select,newChat,send,retry,rename,remove,clear,
+  return {conversations,conversation,turns,partial,error,busy,generating,loading,select,newChat,send,retry,rename,remove,clear,activeMeal,
+    confirmingMeal,setConfirmingMeal,updateMealDescription,
+    dismissMeal:()=>setActiveMeal(undefined),
+    confirmMeal:()=>setActiveMeal(current=>current?{...current,confirmed:true}:undefined),
     stop:()=>active.current?.abort()};
 }

@@ -14,6 +14,13 @@ it('parses described meals, decimal portions and barcodes without changing the d
   ]);
   expect(parseMealText('1234567890123').lines[0]).toMatchObject({query:'1234567890123',amount:null});
   expect(isMealLogMessage('Log 40g synthetic oats')).toBe(true);
+  expect(isMealLogMessage('Ik heb net 40 gram Synthetic oat bowl gegeten voor lunch')).toBe(true);
+  expect(parseMealText('Ik heb net 40 gram Synthetic oat bowl gegeten voor lunch')).toEqual({meal:'Lunch',lines:[
+    {query:'Synthetic oat bowl',amount:40,unit:'g'},
+  ]});
+  expect(parseMealText('I just ate a banana and an apple').lines).toEqual([
+    {query:'banana',amount:1,unit:'serving'},{query:'apple',amount:1,unit:'serving'},
+  ]);
   expect(isMealLogMessage('How many calories did I log for lunch?')).toBe(false);
   expect(()=>parseMealText('a,b,c,d,e,f,g')).toThrow('six');
 });

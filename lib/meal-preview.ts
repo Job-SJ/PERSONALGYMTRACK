@@ -7,29 +7,34 @@ export type MealPreview={meal:Meal|null;lines:MatchedLine[]};
 export type ConfirmMeal={type:'confirm-meal';requestId:string;day:string;meal:Meal;portions:Portion[]};
 export const maxMealText=420;
 export const maxMealItems=6;
-export const isMealLogMessage=(text:string)=>/^(?:(?:please\s+)?(?:log|add|registreer)\s+(?:(?:my\s+|mijn\s+)?(?:breakfast|ontbijt|lunch|dinner|avondeten|snacks?|tussendoortje)\s*:|\d)|(?:i (?:ate|had)|ik (?:at|had))\s+\d)/i.test(text.trim());
+const explicitMeal=/^(?:(?:please\s+)?(?:log|registreer)\s+(?:this for me\s*:\s*|(?:(?:my|mijn)\s+)?(?=\d|(?:breakfast|ontbijt|lunch|dinner|avondeten|snacks?|tussendoortje)\b))|(?:i (?:just )?(?:ate|had)|ik (?:at|had)(?: net)?)\s+)/i;
+export const isMealLogMessage=(text:string)=>explicitMeal.test(text.trim())||/^ik heb (?:net |zojuist )?(?:gegeten\b|.+\bgegeten(?:\s+voor\s+\w+)?[.!]?$)/i.test(text.trim());
 
 const mealWords:Record<string,Meal>={breakfast:'Breakfast',ontbijt:'Breakfast',lunch:'Lunch',dinner:'Dinner',avondeten:'Dinner',
   snack:'Snacks',snacks:'Snacks',tussendoortje:'Snacks'};
 const servings='servings?|portions?|porties?|stuks?|pieces?';
-const measure=new RegExp(`^(\\d+(?:[.,]\\d+)?)\\s*(kg|ml|g|l|${servings})?\\s+(?:of\\s+|van\\s+)?(.+)$`,'i');
+const measure=new RegExp(`^(\\d+(?:[.,]\\d+)?)\\s*(kg|kilo|milliliters?|ml|gram|g|liter|l|${servings})?\\s+(?:of\\s+|van\\s+)?(.+)$`,'i');
 
 export function parseMealText(input:string){
   const text=typeof input==='string'?input.trim():'';
   if(!text||text.length>maxMealText) throw new Error('Describe a meal in up to 420 characters.');
   let meal:Meal|null=null;
-  const cleaned=text.replace(/^(?:please\s+)?(?:(?:log|add|registreer|logboek)\s+(?:(?:my|mijn)\s+)?|(?:i (?:ate|had)|ik (?:at|had))\s+)/i,'')
+  const cleaned=text.replace(explicitMeal,'').replace(/^ik heb (?:net |zojuist )?(?:gegeten\s*[:,]?\s*)?/i,'')
+    .replace(/^(?:please\s+)?(?:(?:log|add|registreer|logboek)\s+(?:(?:my|mijn)\s+)?|(?:i (?:ate|had)|ik (?:at|had))\s+)/i,'')
     .replace(/^(?:for |voor )?(breakfast|ontbijt|lunch|dinner|avondeten|snacks?|tussendoortje)\s*(?::|,|\s)\s*/i,
       (_,name:string)=>{meal=mealWords[name.toLowerCase()];return '';})
     .replace(/\s+(?:for|voor)\s+(breakfast|ontbijt|lunch|dinner|avondeten|snacks?|tussendoortje)[.!]?$/i,
-      (_,name:string)=>{meal=mealWords[name.toLowerCase()];return '';});
-  const lines=cleaned.split(/\n|;|(?<!\d),|,(?!\d)|\s+(?:and|en|\+)\s+(?=\d)/i).map(part=>part.trim()).filter(Boolean).map(part=>{
-    const match=/^\d{4,24}$/.test(part)?null:measure.exec(part);
+      (_,name:string)=>{meal=mealWords[name.toLowerCase()];return '';})
+    .replace(/\s+gegeten[.!]?$/i,'');
+  const lines=cleaned.split(/\n|;|(?<!\d),|,(?!\d)|\s+(?:and|en|\+)\s+(?=\d|(?:a|an|een)\s)/i).map(part=>part.trim()).filter(Boolean).map(part=>{
+    const match=/^\d{4,24}$/.test(part)?null:measure.exec(part.replace(/^(?:a|an|een)\s+/i,'1 '));
     if(!match) return {query:part.replace(/[.!?]+$/,''),amount:null,unit:null};
     const [,number,word,item]=match;
     const unit=word?.toLowerCase();
-    const amount=Number(number.replace(',','.'))*(unit==='kg'||unit==='l'?1000:1);
-    return {query:item.replace(/[.!?]+$/,''),amount,unit:(unit==='kg'||unit==='g'?'g':unit==='l'||unit==='ml'?'ml':'serving') as Unit};
+    const g=unit&&/^(?:kg|kilo|g|gram)$/.test(unit);
+    const ml=unit&&/^(?:l|liter|ml|milliliters?)$/.test(unit);
+    const amount=Number(number.replace(',','.'))*(unit&&/^(?:kg|kilo|l|liter)$/.test(unit)?1000:1);
+    return {query:item.replace(/[.!?]+$/,''),amount,unit:(g?'g':ml?'ml':'serving') as Unit};
   });
   if(!lines.length||lines.length>maxMealItems||lines.some(line=>line.query.length<2||line.query.length>80)){
     throw new Error('Enter up to six food names or barcodes, separated by commas or new lines.');

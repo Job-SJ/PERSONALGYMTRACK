@@ -11,7 +11,8 @@ const env={
   SUPABASE_SERVER_SECRET:'sb_secret_synthetic-fixture',
   INTEGRATION_KEYS:JSON.stringify({synthetic:Buffer.alloc(32,7).toString('base64url')}),
   INTEGRATION_ACTIVE_KEY:'synthetic',
-  HEVY_API_KEY:'disabled',HEVY_OWNER_ID:'disabled',OPENROUTER_INSTANCE_KEY:'',PGT_PUBLIC_REGISTRATION:'false',
+  HEVY_API_KEY:'disabled',HEVY_OWNER_ID:'disabled',OPENROUTER_INSTANCE_KEY:'synthetic-test-provider-key',PGT_PUBLIC_REGISTRATION:'false',
+  NODE_OPTIONS:'--import=./e2e-private/fixture-provider.mjs',
   PGT_NOTIFICATION_JOB_SECRET:'disabled',VAPID_PUBLIC_KEY:'disabled',VAPID_PRIVATE_KEY:'disabled',VAPID_SUBJECT:'disabled',
 };
 export default defineConfig({
