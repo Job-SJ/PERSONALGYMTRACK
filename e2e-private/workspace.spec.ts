@@ -29,9 +29,12 @@ test('Coach finds a training partner in the signed-in owner’s stored workouts'
   const answer=await request.post('/api/coach',{headers,data:{action:'send',id,turn,prompt:'Who do I usually train with?'}});
   expect(answer.status()).toBe(200);
   const result=await answer.json();
-  expect(result.turn.answer).toContain('**Alex** — 2 workouts');
+  expect(result.turn.answer).toContain('**Alex** — 3 workouts (0.6%)');
+  expect(result.turn.answer).toContain('**R.J.** — 1 workout');
   expect(result.turn.answer).not.toContain('Morgan');
-  expect(result.turn.evidence.dates).toHaveLength(2);
+  expect(result.turn.evidence.dates).toHaveLength(3);
+  expect(result.turn.evidence.label).toContain('517 workouts');
+  expect(result.turn.evidence.details[0]).toContain('subtitle, inferred');
   expect(result.turn.local_analysis).toBe(true);
   const persisted=await request.post('/api/coach',{headers,data:{action:'conversation',id}});
   expect((await persisted.json()).turns[0].evidence).toEqual(result.turn.evidence);
@@ -56,6 +59,9 @@ test('signed-in dashboard, integrated Coach and notification center fit the view
   await expect(page.getByText('Reflect on your recorded training week.')).toBeVisible();
   const theme=email==='one@example.invalid'?'dark':'light';
   await expect(page.locator('.workspace')).toHaveClass(new RegExp('theme-'+theme));
+  await page.goto('/app/workouts/fixture-workout-0');
+  await expect(page.getByText(email==='one@example.invalid'?'Alex & R.J.':'Morgan',{exact:true})).toBeVisible();
+  await page.goto('/app');
   await page.getByRole('link',{name:'Open Coach'}).click();
   await expect(page.getByRole('heading',{name:'Coach',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Coach settings',exact:true}).click();

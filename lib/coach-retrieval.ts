@@ -8,6 +8,7 @@ import type {Template,Workout} from './model';
 import {portionSchema,portionValues,type Entry} from './nutrition';
 
 const limit=500;
+export class PartnerHistoryError extends Error {}
 const mean=(values:number[])=>values.length?Math.round(values.reduce((sum,value)=>sum+value,0)/values.length*10)/10:null;
 const isoDay=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'});
 function midnight(day:string){
@@ -26,6 +27,32 @@ export async function retrieveCoachEvidence(client:SupabaseClient,owner:string,p
   const today=dayKey(new Date());
   const previous=history.find(turn=>turn.answer)?.prompt??'';
   const plans=planCoachAnalysis(prompt,previous,today,routed);
+  if(plans[0]?.tool==='partners'){
+    const query=plans[0];
+    const partnerDeadline=AbortSignal.any([signal,AbortSignal.timeout(25000)]);
+    const workouts=new Map<string,Parameters<typeof partnerReply>[0][number]>();
+    const pageSize=200;
+    let expected:number|null=null;
+    for(let offset=0;;){
+      const read=client.from('workouts').select('id,title,started_at,ended_at,notes,workout_exercises(notes)',offset===0?{count:'exact'}:{})
+        .eq('user_id',owner).lt('started_at',midnight(shiftDay(query.through,1)));
+      if(query.from) read.gte('started_at',midnight(query.from));
+      const page=await read.order('started_at',{ascending:false}).order('id').range(offset,offset+pageSize-1).abortSignal(partnerDeadline);
+      if(page.error||!page.data) throw new PartnerHistoryError('Coach could not read the complete training history. Try again or choose a shorter period.');
+      const records=page.data as Parameters<typeof partnerReply>[0];
+      if(offset===0) expected=page.count;
+      for(const workout of records){
+        if(workouts.has(workout.id)) throw new PartnerHistoryError('Workout history changed during partner analysis. Try again.');
+        workouts.set(workout.id,workout);
+      }
+      offset+=records.length;
+      if(!records.length||expected===offset) break;
+      partnerDeadline.throwIfAborted();
+    }
+    if(expected!==workouts.size) throw new PartnerHistoryError('Coach could not verify the complete training history. Try again.');
+    partnerDeadline.throwIfAborted();
+    return {local:partnerReply([...workouts.values()],query,prompt,previous)};
+  }
   const workoutRows=(query:AnalyticalQuery,fields:string)=>client.from('workouts').select(fields).eq('user_id',owner)
     .gte('started_at',midnight(query.from??'1900-01-01')).lt('started_at',midnight(shiftDay(query.through,1)))
     .order('started_at',{ascending:false}).order('id').limit(limit+1).abortSignal(deadline);
@@ -153,11 +180,6 @@ export async function retrieveCoachEvidence(client:SupabaseClient,owner:string,p
       .map(row=>({...row,kind:'weight',id:'',source:'recorded'})):[];
     return {...window,capped,result:tool==='strength'?strengthEvidence(workouts,templates,prompt,body,previous):
       trainingEvidence(workouts,templates,query,capped,first)};
-  }
-  if(plans[0]?.tool==='partners'){
-    const query=plans[0];
-    const sample=rows(await workoutRows(query,'id,title,started_at,ended_at,notes,workout_exercises(notes)'));
-    return {local:partnerReply(sample.data as unknown as Parameters<typeof partnerReply>[0],query,prompt,previous,sample.capped)};
   }
   const results=await Promise.all(plans.map(execute));
   // Never truncate JSON inside an evidence item.

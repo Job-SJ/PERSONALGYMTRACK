@@ -189,7 +189,8 @@ export function MobileCoach({session,p}:{session:Session;p:Palette}){
           {turn.answer?<Markdown value={turn.answer} p={p}/>:index===chat.turns.length-1&&chat.partial?<Markdown value={chat.partial} p={p}/>:null}
           {turn.evidence&&<View style={{alignItems:'flex-start'}}>
             <Button p={p} text={evidence===turn.id?'Hide evidence':'Supporting evidence'} action={()=>setEvidence(evidence===turn.id?undefined:turn.id)}/>
-            {evidence===turn.id&&<Text style={caption}>{[turn.evidence.label,...turn.evidence.dates].join(' · ')}</Text>}
+            {evidence===turn.id&&<Text style={caption}>{turn.evidence.details?.length?
+              [turn.evidence.label,...turn.evidence.details].join('\n\n'):[turn.evidence.label,...turn.evidence.dates].join(' · ')}</Text>}
           </View>}
         </View>)}
         {chat.loading&&<Text style={caption}>Loading conversations…</Text>}

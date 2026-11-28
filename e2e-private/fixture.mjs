@@ -46,7 +46,7 @@ function rows(table,id){
   if(table==='workouts') return Array.from({length:isOne?12:3},(_,index)=>({
     id:'fixture-workout-'+index,title:(isOne?'Cedar':'Maple')+' session '+(index+1),source:'hevy',
     started_at:on(-1-index*4)+'T17:00:00Z',ended_at:on(-1-index*4)+'T18:00:00Z',
-    notes:index<2?(isOne?'Trained with Alex.':'Trained with Morgan.'):null,
+    notes:index<2?(isOne?['Alex & R.J.','Alex (Lex), Lex'][index]:'Morgan'):null,
     workout_exercises:[{position:0,template_id:template.id,title:template.title,notes:null,workout_sets:[
       {position:0,type:'normal',reps:5,weight_kg:90-index*2,duration_seconds:null,distance_meters:null,rpe:8},
     ]}],
@@ -111,6 +111,19 @@ if(process.env.PGT_FIXTURE_LISTEN==='1'){
       if(table==='coach_turns'){
         const conversation=filters.get('conversation_id')?.slice(3);
         return send(200,[...coachTurns.values()].filter(row=>row.user_id===claims.sub&&row.conversation_id===conversation));
+      }
+      if(table==='workouts'&&filters.get('select')==='id,title,started_at,ended_at,notes,workout_exercises(notes)'){
+        const records=rows(table,claims.sub);
+        if(claims.sub===userOne){
+          const older=Array.from({length:505},(_,index)=>({...records.at(-1),id:'older-'+index,
+            started_at:on(-100-index)+'T17:00:00Z',ended_at:on(-100-index)+'T18:00:00Z',
+            notes:index===504?'Alex':null}));
+          records.push(...older);
+        }
+        const offset=Number(filters.get('offset')??0);
+        const selected=records.slice(offset,offset+Number(filters.get('limit')??200));
+        response.setHeader('Content-Range',`${offset}-${offset+selected.length-1}/${records.length}`);
+        return send(200,selected);
       }
       return send(200,rows(table,claims.sub));
     }

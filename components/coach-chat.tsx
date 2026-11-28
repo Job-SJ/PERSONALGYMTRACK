@@ -75,7 +75,8 @@ export function CoachChat({blocked}:{blocked:boolean}){
         {turn.answer?<CoachMarkdown text={turn.answer}/>:index===chat.turns.length-1&&chat.partial?<CoachMarkdown text={chat.partial}/>:null}
         {turn.answer&&<div className="coach-evidence">
           {turn.evidence&&<details><summary>Supporting evidence</summary><p>{turn.evidence.label}</p>
-            {turn.evidence.dates.length>0&&<p>{turn.evidence.dates.join(' · ')}</p>}</details>}
+            {turn.evidence.details?.length?<ul>{turn.evidence.details.map(detail=><li key={detail}>{detail}</li>)}</ul>:
+              turn.evidence.dates.length>0&&<p>{turn.evidence.dates.join(' · ')}</p>}</details>}
           <button className="coach-copy" aria-label={copied===turn.id?'Copied':'Copy response'} title="Copy response"
             onClick={()=>{
               if(!navigator.clipboard){setCopied('error');return;}

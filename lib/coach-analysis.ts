@@ -13,7 +13,7 @@ export type AnalyticalQuery=z.infer<typeof analyticalQuery>;
 type Tool=AnalyticalQuery['tool'];
 
 const intents:[Tool,RegExp][]=[
-  ['partners',/\b(partners?|trainingspartner\w*|with whom|met wie|samen|wie.*train\w*|(?:train\w*|workouts?) (?:with|met))\b/i],
+  ['partners',/\b(partners?|trainingspartner\w*|trainingsmaat\w*|gym budd(?:y|ies)|with whom|met wie|samen|wie.*train\w*|(?:train\w*|workouts?|work(?:ed|ing)? out|lift\w*) (?:with|met))\b/i],
   ['nutrition',/calori|nutrition|voeding|protein|eiwit|diary|dagboek|macros?|maintenance|onderhoud/i],
   ['bodyweight',/body\s?weight|lichaamsgewicht|weight trend|my weight|mijn gewicht|weigh|gewichtstrend/i],
   ['goals',/\bgoals?\b|doel|focus|what should|waar.*op letten/i],
@@ -187,36 +187,44 @@ export function strengthEvidence(workouts:Workout[],templates:Map<string,Templat
     exercises:[...new Set([...byChange.slice(0,2),...byChange.slice(-2),...results.sort((a,b)=>b.sessions-a.sessions)])].slice(0,8)};
 }
 
-export function partnerReply(workouts:PartnerWorkout[],query:AnalyticalQuery,prompt:string,previous:string,capped:boolean){
+export function partnerReply(workouts:PartnerWorkout[],query:AnalyticalQuery,prompt:string,previous:string){
   const {partners,aliases,duration}=discoverPartners(workouts,query.through);
   const dutch=/\b(wie|hoe|wanneer|met wie|vaak|trainde|trainingspartner|vergelijk|samen|mijn)\b/i.test(prompt);
-  const words=new Set([...prompt.matchAll(/@?[\p{L}’'-]+/gu)].map(match=>partnerKey(match[0])));
-  const nameQuery=(value:string)=>value.match(/\b(?:with|met)\s+(@?[\p{L}’'-]+)/iu)?.[1]??
-    value.match(/^(?:what about|and|en)\s+(@?[\p{Lu}][\p{L}’'-]+)\s*\?*$/u)?.[1];
-  const requested=nameQuery(prompt)??(/^(?:and|en|what about|hoe zit)/i.test(prompt)?nameQuery(previous):undefined);
+  const nameQuery=(value:string)=>value.match(/\b(?:[Ww]ith|[Mm]et)\s+(@?[\p{L}.’'-]+(?:\s+[\p{Lu}][\p{L}.’'-]*){0,2})/u)?.[1]??
+    value.match(/^(?:what about|and|en)\s+(@?[\p{Lu}][\p{L}.’'-]*)\s*\?*$/u)?.[1];
+  const generic=/^(?:a|someone|somebody|people|iemand|een|wie|me|them|hen|others|other|whom|most|often|usually|recently|last|this|more|in|on|het|meestal|vaak|laatst|samen)$/i;
+  const requested=nameQuery(prompt)??(followUpPattern.test(prompt)?nameQuery(previous):undefined);
   const named=requested?partnerKey(requested):undefined;
-  const matched=partners.find(row=>words.has(row.key)||row.key===named||[...aliases].some(([alias,keys])=>
-    keys.size===1&&keys.has(row.key)&&(words.has(alias)||alias===named)));
-  const unknownNamed=named&&!matched&&!/^(?:a|someone|somebody|people|iemand|een|wie|me|them|hen|others|other|whom|most|often|usually|recently|last|this|more|in|on|het|meestal|vaak|laatst|samen)$/i.test(named);
-  const dateWindow=query.from?`${query.from} – ${query.through}`:query.through;
+  const specific=named&&!generic.test(named);
+  const matched=specific?partners.find(row=>row.key===named||(aliases.get(named)?.size===1&&aliases.get(named)?.has(row.key))):undefined;
+  const latest=/\bwho\b.*\blast\b|\bmet wie\b.*\blaatst\b/i.test(prompt);
+  const ranked=matched?[matched]:specific?[]:latest?[...partners].sort((a,b)=>b.last.localeCompare(a.last)):partners;
+  const first=workouts.map(row=>dayKey(row.started_at)).sort()[0];
+  const dateWindow=(query.from??first??query.through)+' – '+query.through;
   const source=dutch?`Bekeken: ${workouts.length} trainingen · ${dateWindow}`:`Reviewed ${workouts.length} workouts · ${dateWindow}`;
-  const scope=capped?(dutch?' De scan bereikte de limiet. Oudere trainingen kunnen ontbreken.':' The scan reached its limit. Older workouts may be missing.'):'';
-  const latestQuestion=/\bwho\b.*\blast\b|\bmet wie\b.*\blaatst\b/i.test(prompt);
-  const selected=matched??(latestQuestion?[...partners].sort((a,b)=>b.last.localeCompare(a.last))[0]:partners[0]);
-  if(!selected||unknownNamed) return {
-    text:(dutch?'Ik vond geen expliciete vermelding van deze trainingspartner in de bekeken trainingen.':'I found no explicit reference to this training partner in the workouts I reviewed.')+
-      (dutch?' Titels, beschrijvingen en oefennotities tellen mee als ze vermelden dat je samen hebt getraind.':' Titles, descriptions and exercise notes count when they explicitly say you trained together.')+scope,
+  if(!ranked.length) return {
+    text:dutch?'Ik vond geen partnervermelding of waarschijnlijke partnernaam in de bekeken trainingen.':
+      'I found no confirmed partner reference or likely partner name in the workouts reviewed.',
     evidence:{label:source,dates:[]},
   };
-  const tied=!matched&&!latestQuestion&&partners.filter(row=>row.count===selected.count).slice(0,5);
-  const label=tied&&tied.length>1?tied.map(row=>row.name).join(', '):selected.name;
-  const confidence=selected.count>=3?(dutch?'sterke herhaalde aanwijzingen':'strong repeated evidence'):(dutch?'beperkte aanwijzingen':'limited evidence');
-  const text=dutch?
-    `**${label}** — ${selected.count} trainingen met een expliciete vermelding${tied&&tied.length>1?' per persoon (gedeelde eerste plaats)':''}. ${selected.name}: laatst op ${selected.last}, ${selected.recent} in de 30 dagen tot ${query.through} (${confidence}).`:
-    `**${label}** — ${selected.count} workouts with explicit references${tied&&tied.length>1?' per person (tied for most)':''}. For ${selected.name}: last on ${selected.last}, with ${selected.recent} in the 30 days through ${query.through} (${confidence}).`;
-  const {explicit,unlabelled}=duration;
-  const comparison=query.compare&&explicit.count&&unlabelled.count?
-    (dutch?`\n\nTrainingen met een partnervermelding duurden gemiddeld ${explicit.mean} min (n=${explicit.count}) en trainingen zonder vermelding ${unlabelled.mean} min (n=${unlabelled.count}). Een ontbrekende vermelding zegt niets over wie er bij was.`:
-      `\n\nWorkouts with an explicit partner reference averaged ${explicit.mean} minutes (n=${explicit.count}), versus ${unlabelled.mean} minutes without one (n=${unlabelled.count}). Unlabelled workouts may include partners.`):'';
-  return {text:text+comparison+scope,evidence:{label:source,dates:[...new Set((tied&&tied.length?tied:[selected]).flatMap(row=>row.dates))].sort().reverse().slice(0,12)}};
+  const summary=(row:typeof ranked[number])=>dutch?
+    `${row.count} training${row.count===1?'':'en'} (${row.percentage}%): ${row.confirmed} bevestigd door de tekst, ${row.inferred} afgeleid. Laatst op ${row.last}.`:
+    `${row.count} workout${row.count===1?'':'s'} (${row.percentage}%): ${row.confirmed} confirmed by wording, ${row.inferred} inferred. Last on ${row.last}.`;
+  const lines=ranked.slice(0,latest?1:8).map(row=>`**${row.name}** — ${summary(row)}`);
+  const explanation=dutch?`Percentages zijn gebaseerd op alle ${workouts.length} bekeken trainingen. Een naam in een subtitel is een aanwijzing.`:
+    `Percentages use all ${workouts.length} reviewed workouts. A name in a subtitle is inferred evidence.`;
+  const more=!latest&&ranked.length>8?(dutch?' De volledige ranglijst staat bij het bewijs.':' The full ranking is in Supporting evidence.'):'';
+  const {labelled,unlabelled}=duration;
+  const comparison=query.compare&&labelled.count>0&&unlabelled.count>0?(
+    dutch?`Trainingen met partnerbewijs duurden gemiddeld ${labelled.mean} min (n=${labelled.count}), tegenover ${unlabelled.mean} min zonder vermelding (n=${unlabelled.count}).`:
+      `Workouts with partner evidence averaged ${labelled.mean} minutes (n=${labelled.count}), versus ${unlabelled.mean} minutes without a reference (n=${unlabelled.count}).`):'';
+  const evidenceSources={subtitle:dutch?'subtitel':'subtitle',title:dutch?'titel':'title',
+    'exercise note':dutch?'oefennotitie':'exercise note'};
+  const details=ranked.map(row=>{
+    const recent=row.evidence.slice(0,5).map(item=>`${item.day} (${evidenceSources[item.source]}, ${item.confirmed?
+      (dutch?'bevestigd':'confirmed'):(dutch?'afgeleid':'inferred')})`).join(' · ');
+    return `${row.name} — ${summary(row)} ${dutch?'Recente voorbeelden':'Recent examples'}: ${recent}`;
+  });
+  const dates=[...new Set(ranked.flatMap(row=>row.evidence.slice(0,12).map(item=>item.day)))].sort().reverse().slice(0,12);
+  return {text:[lines.join('\n\n'),explanation+more,comparison].filter(Boolean).join('\n\n'),evidence:{label:source,dates,details}};
 }
