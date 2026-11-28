@@ -1,64 +1,58 @@
 import {describe,expect,it} from 'vitest';
 import {analyticalQuery,needsCoachRouting,partnerReply,planCoachAnalysis,strengthEvidence,trainingEvidence} from '../lib/coach-analysis';
 import {conversationContext} from '../lib/coach-chat';
-import {discoverPartners,type PartnerWorkout} from '../lib/coach-partners';
+import {discoverPartners,taggedUsernames,type PartnerWorkout} from '../lib/coach-partners';
 import {coachReadiness,recommendCoachModels} from '../lib/coach-setup';
 import type {CoachModel} from '../lib/coach-provider';
 import type {Workout,Template} from '../lib/model';
 
 const today='2026-11-28';
-const partner=(id:string,day:string,title:string,notes?:string,exerciseNote?:string):PartnerWorkout=>({
-  id,title,notes,started_at:day+'T17:00:00Z',ended_at:day+'T18:00:00Z',workout_exercises:[{notes:exerciseNote}],
-});
+const partner=(id:string,day:string,notes:string|null=null)=>{
+  return {id,title:'Synthetic workout',notes,started_at:day+'T17:00:00Z',ended_at:day+'T18:00:00Z',
+    workout_exercises:[{notes:'@synthetic_exercise_only'}]};
+};
 const workouts=[
-  partner('one','2026-11-27','Push with Alex','Trained with ALEX.'),
-  partner('two','2026-11-24','Leg day','Trained with Alex (aka Lex).'),
-  partner('three','2026-10-11','Upper','Tough session.','Getraind met lex.'),
-  partner('four','2026-10-07','Workout with Morgan'),
-  partner('five','2026-10-06','Alex bench program','Morgan spotted my set.'),
-  partner('six','2026-10-05','Upper','Will train with Alex tomorrow. Trained with resistance.'),
+  partner('one','2026-11-27','Some notes (@Synthetic_Lift7), repeated @SYNTHETIC_LIFT7.'),
+  partner('two','2026-11-24','Warmup and cooldown @synthetic_lift7/@synthetic.track22'),
+  partner('three','2026-10-11','Good session! @synthetic_lift7'),
+  partner('four','2026-10-07','Short workout @synthetic.track22 and @synthetic_3'),
+  {...partner('five','2026-10-06','Reach synthetic+coach@example.invalid or synthetic.other@another.invalid.'),
+    title:'@synthetic_title_only'},
+  partner('six','2026-10-05','Trained with Synthetic Bare Name.'),
 ];
 
 describe('Coach analytical routing',()=>{
-  it('discovers the leading training partner without a name in the question',()=>{
+  it('ranks tagged workouts only, deduplicating each handle within a workout',()=>{
     const [query]=planCoachAnalysis('Who do I usually train with?','',today);
     expect(query.tool).toBe('partners');
+    expect(query.from).toBeNull();
     const reply=partnerReply(workouts,query,'Who do I usually train with?','');
-    expect(reply.text).toContain('**Alex** — 3 workouts');
+    expect(reply.text).toContain('**@synthetic_lift7** — 3 workouts (50%)');
     expect(reply.text).toContain('Last on 2026-11-27');
+    expect(reply.text).toContain('Inferred training partners based on tagged mentions');
     expect(reply.evidence.dates).toEqual(['2026-11-27','2026-11-24','2026-10-11','2026-10-07']);
-    expect(discoverPartners(workouts,today).partners.map(({key,count})=>({key,count})))
-      .toEqual([{key:'alex',count:3},{key:'morgan',count:1}]);
-    expect(partnerReply(workouts,query,'Who do I train with most often?','').text).toContain('**Alex**');
-    expect(discoverPartners([partner('unknown','2026-11-07','Trained with purpose.')],today).partners).toEqual([]);
+    expect(reply.evidence.details?.[0]).toContain('2026-11-27 · 2026-11-24 · 2026-10-11');
+    expect(discoverPartners(workouts).partners.map(({username,count})=>({username,count}))).toEqual([
+      {username:'synthetic_lift7',count:3},{username:'synthetic.track22',count:2},{username:'synthetic_3',count:1},
+    ]);
+    expect(partnerReply(workouts,query,'Who do I train with most often?','').text).toContain('**@synthetic_lift7**');
   });
 
-  it('ranks bare subtitles, name lists and abbreviations while separating explicit evidence',()=>{
-    const sample=[
-      partner('one','2026-11-27','Upper','Marin & R.J.','Trained with Marin. Felt good.'),
-      partner('two','2026-11-24','Lower','Marin (Rin), Rin / R. J.'),
-      partner('three','2026-10-11','Push','rin'),
-      partner('four','2026-10-07','Pull','Quinn'),
-      partner('five','2026-10-06','Quinn','Very Good Workout','Quinn'),
-      partner('six','2026-10-05','Upper','Sore Knee'),
-    ];
-    const [query]=planCoachAnalysis('Who do I usually train with?','',today);
-    const result=partnerReply(sample,query,'Who do I usually train with?','');
-    expect(result.text).toContain('**Marin** — 3 workouts (50%): 1 confirmed by wording, 2 inferred');
-    expect(result.text).toContain('**R.J.** — 2 workouts (33.3%)');
-    expect(result.text).toContain('**Quinn** — 1 workout');
-    expect(result.text).not.toMatch(/Sore|Very Good/);
-    expect(result.evidence.details?.[0]).toContain('2026-11-27 (exercise note, confirmed)');
-    expect(result.evidence.details?.[0]).toContain('2026-10-11 (subtitle, inferred)');
-    expect(partnerReply(sample,query,'How often do I train with Rin?','').text).toContain('**Marin**');
+  it('finds mentions beside punctuation and excludes email addresses',()=>{
+    expect([...taggedUsernames('Mail person+notes@sample.invalid or <user.name@sub.sample.invalid>. (@Synthetic_Name2),@synthetic.dot3; /@synthetic_4!')])
+      .toEqual(['synthetic_name2','synthetic.dot3','synthetic_4']);
+    expect([...taggedUsernames('@synthetic_1/@SYNTHETIC.TWO and @@synthetic_invalid and @')])
+      .toEqual(['synthetic_1','synthetic.two']);
   });
 
-  it('handles nickname questions, missing evidence and Dutch follow-ups',()=>{
-    const [query]=planCoachAnalysis('En hoe vaak met Lex in de laatste 30 dagen?','Wie is mijn trainingspartner?',today);
+  it('supports tagged username questions, missing evidence and Dutch follow-ups',()=>{
+    const question='En hoe vaak @SYNTHETIC_LIFT7 in de laatste 30 dagen?';
+    const [query]=planCoachAnalysis(question,'Wie is mijn trainingspartner?',today);
     expect(query).toMatchObject({tool:'partners',from:'2026-10-30'});
-    expect(partnerReply(workouts.slice(0,2),query,'Hoe vaak met Lex?','').text).toContain('2 trainingen');
-    expect(partnerReply(workouts.slice(0,2),query,'Hoe vaak met Robin?','').text).toContain('geen partnervermelding');
+    expect(partnerReply(workouts.slice(0,2),query,question,'').text).toContain('**@synthetic_lift7** — 2 trainingen');
+    expect(partnerReply(workouts.slice(0,2),query,'Hoe vaak met @synthetic_unknown?','').text).toContain('geen passende @tags');
     expect(partnerReply([],query,'Wie is mijn trainingspartner?','').evidence.dates).toEqual([]);
+    expect(planCoachAnalysis('What about @synthetic.track22?','',today)[0]?.tool).toBe('partners');
   });
 
   it('uses validated ranges and disallows caller-supplied owners or tools',()=>{
@@ -90,7 +84,7 @@ describe('Coach calculated evidence',()=>{
   ]);
   const set=(weight:number)=>({position:0,type:'normal' as const,weight_kg:weight,reps:5});
   const lift=(row:PartnerWorkout,id:string,value:number):Workout=>({
-    ...row,notes:row.notes,source:'csv',workout_exercises:[{title:id,position:0,template_id:id,notes:null,workout_sets:[set(value)]}],
+    ...row,title:'Synthetic workout',notes:row.notes,source:'csv',workout_exercises:[{title:id,position:0,template_id:id,notes:null,workout_sets:[set(value)]}],
   });
   const data=[lift(workouts[0],'bench',60),lift(workouts[1],'bench',50),lift(workouts[2],'deadlift',90)];
 

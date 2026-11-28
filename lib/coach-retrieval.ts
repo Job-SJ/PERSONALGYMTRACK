@@ -34,7 +34,7 @@ export async function retrieveCoachEvidence(client:SupabaseClient,owner:string,p
     const pageSize=200;
     let expected:number|null=null;
     for(let offset=0;;){
-      const read=client.from('workouts').select('id,title,started_at,ended_at,notes,workout_exercises(notes)',offset===0?{count:'exact'}:{})
+      const read=client.from('workouts').select('id,started_at,ended_at,notes',offset===0?{count:'exact'}:{})
         .eq('user_id',owner).lt('started_at',midnight(shiftDay(query.through,1)));
       if(query.from) read.gte('started_at',midnight(query.from));
       const page=await read.order('started_at',{ascending:false}).order('id').range(offset,offset+pageSize-1).abortSignal(partnerDeadline);

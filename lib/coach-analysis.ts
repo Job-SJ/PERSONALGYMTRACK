@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {dayKey, estimate, loaded, muscleTotals, relativeStrength, shiftDay, sum, weekKey, working, workoutMetrics, zone} from './analytics';
-import {discoverPartners, partnerKey, type PartnerWorkout} from './coach-partners';
+import {discoverPartners, taggedUsernames, type PartnerWorkout} from './coach-partners';
 import type {Measurement, Template, Workout} from './model';
 
 export const analyticalQuery=z.object({
@@ -23,7 +23,7 @@ const intents:[Tool,RegExp][]=[
   ['workouts',/\b(?:list|show)\b.*\b(?:workouts?|sessions?)\b|toon.*trainingen/i],
   ['training',/duration|how long|volume|frequency|consisten|habit|weekdays?|which days|training|workouts?|sessions?|duur|hoe lang|patron|gewoont/i],
 ];
-const matches=(prompt:string)=>intents.filter(([,pattern])=>pattern.test(prompt)).map(([tool])=>tool);
+const matches=(prompt:string)=>intents.filter(([tool,pattern])=>pattern.test(prompt)||tool==='partners'&&taggedUsernames(prompt).size>0).map(([tool])=>tool);
 const followUpPattern=/^(?:and|what about|how about|en|hoe zit|how many|how often|hoeveel|hoe vaak)\b|\b(?:that|those|same|daarmee|diezelfde)\b/i;
 export const needsCoachRouting=(prompt:string,previous:string)=>!matches(prompt).length&&
   !(followUpPattern.test(prompt)&&matches(previous).length);
@@ -188,43 +188,35 @@ export function strengthEvidence(workouts:Workout[],templates:Map<string,Templat
 }
 
 export function partnerReply(workouts:PartnerWorkout[],query:AnalyticalQuery,prompt:string,previous:string){
-  const {partners,aliases,duration}=discoverPartners(workouts,query.through);
+  const {partners,duration}=discoverPartners(workouts);
   const dutch=/\b(wie|hoe|wanneer|met wie|vaak|trainde|trainingspartner|vergelijk|samen|mijn)\b/i.test(prompt);
-  const nameQuery=(value:string)=>value.match(/\b(?:[Ww]ith|[Mm]et)\s+(@?[\p{L}.’'-]+(?:\s+[\p{Lu}][\p{L}.’'-]*){0,2})/u)?.[1]??
-    value.match(/^(?:what about|and|en)\s+(@?[\p{Lu}][\p{L}.’'-]*)\s*\?*$/u)?.[1];
-  const generic=/^(?:a|someone|somebody|people|iemand|een|wie|me|them|hen|others|other|whom|most|often|usually|recently|last|this|more|in|on|het|meestal|vaak|laatst|samen)$/i;
-  const requested=nameQuery(prompt)??(followUpPattern.test(prompt)?nameQuery(previous):undefined);
-  const named=requested?partnerKey(requested):undefined;
-  const specific=named&&!generic.test(named);
-  const matched=specific?partners.find(row=>row.key===named||(aliases.get(named)?.size===1&&aliases.get(named)?.has(row.key))):undefined;
+  const requested=taggedUsernames(prompt);
+  if(!requested.size&&followUpPattern.test(prompt)){
+    for(const username of taggedUsernames(previous)) requested.add(username);
+  }
   const latest=/\bwho\b.*\blast\b|\bmet wie\b.*\blaatst\b/i.test(prompt);
-  const ranked=matched?[matched]:specific?[]:latest?[...partners].sort((a,b)=>b.last.localeCompare(a.last)):partners;
-  const first=workouts.map(row=>dayKey(row.started_at)).sort()[0];
-  const dateWindow=(query.from??first??query.through)+' – '+query.through;
+  const matches=requested.size?partners.filter(row=>requested.has(row.username)):partners;
+  const ranked=latest?[...matches].sort((a,b)=>b.last.localeCompare(a.last)):matches;
+  const first=workouts.map(row=>row.started_at).sort()[0];
+  const dateWindow=(query.from??(first?dayKey(first):query.through))+' – '+query.through;
   const source=dutch?`Bekeken: ${workouts.length} trainingen · ${dateWindow}`:`Reviewed ${workouts.length} workouts · ${dateWindow}`;
   if(!ranked.length) return {
-    text:dutch?'Ik vond geen partnervermelding of waarschijnlijke partnernaam in de bekeken trainingen.':
-      'I found no confirmed partner reference or likely partner name in the workouts reviewed.',
+    text:dutch?'Ik vond geen passende @tags in je trainingsnotities.':'I found no matching @mentions in your workout notes.',
     evidence:{label:source,dates:[]},
   };
+  const percentage=(value:number)=>value<0.1?'<0.1%':(Math.round(value*10)/10)+'%';
   const summary=(row:typeof ranked[number])=>dutch?
-    `${row.count} training${row.count===1?'':'en'} (${row.percentage}%): ${row.confirmed} bevestigd door de tekst, ${row.inferred} afgeleid. Laatst op ${row.last}.`:
-    `${row.count} workout${row.count===1?'':'s'} (${row.percentage}%): ${row.confirmed} confirmed by wording, ${row.inferred} inferred. Last on ${row.last}.`;
-  const lines=ranked.slice(0,latest?1:8).map(row=>`**${row.name}** — ${summary(row)}`);
-  const explanation=dutch?`Percentages zijn gebaseerd op alle ${workouts.length} bekeken trainingen. Een naam in een subtitel is een aanwijzing.`:
-    `Percentages use all ${workouts.length} reviewed workouts. A name in a subtitle is inferred evidence.`;
+    `${row.count} training${row.count===1?'':'en'} (${percentage(row.percentage)}). Laatst op ${row.last}.`:
+    `${row.count} workout${row.count===1?'':'s'} (${percentage(row.percentage)}). Last on ${row.last}.`;
+  const lines=ranked.slice(0,latest?1:8).map(row=>`**@${row.username}** — ${summary(row)}`);
+  const explanation=dutch?`Waarschijnlijke trainingspartners op basis van @tags in notities. Percentages gebruiken alle ${workouts.length} bekeken trainingen.`:
+    `Inferred training partners based on tagged mentions in workout notes. Percentages use all ${workouts.length} reviewed workouts.`;
   const more=!latest&&ranked.length>8?(dutch?' De volledige ranglijst staat bij het bewijs.':' The full ranking is in Supporting evidence.'):'';
   const {labelled,unlabelled}=duration;
   const comparison=query.compare&&labelled.count>0&&unlabelled.count>0?(
-    dutch?`Trainingen met partnerbewijs duurden gemiddeld ${labelled.mean} min (n=${labelled.count}), tegenover ${unlabelled.mean} min zonder vermelding (n=${unlabelled.count}).`:
-      `Workouts with partner evidence averaged ${labelled.mean} minutes (n=${labelled.count}), versus ${unlabelled.mean} minutes without a reference (n=${unlabelled.count}).`):'';
-  const evidenceSources={subtitle:dutch?'subtitel':'subtitle',title:dutch?'titel':'title',
-    'exercise note':dutch?'oefennotitie':'exercise note'};
-  const details=ranked.map(row=>{
-    const recent=row.evidence.slice(0,5).map(item=>`${item.day} (${evidenceSources[item.source]}, ${item.confirmed?
-      (dutch?'bevestigd':'confirmed'):(dutch?'afgeleid':'inferred')})`).join(' · ');
-    return `${row.name} — ${summary(row)} ${dutch?'Recente voorbeelden':'Recent examples'}: ${recent}`;
-  });
-  const dates=[...new Set(ranked.flatMap(row=>row.evidence.slice(0,12).map(item=>item.day)))].sort().reverse().slice(0,12);
+    dutch?`Trainingen met @tags duurden gemiddeld ${labelled.mean} min (n=${labelled.count}), tegenover ${unlabelled.mean} min zonder @tags (n=${unlabelled.count}).`:
+      `Workouts with tags averaged ${labelled.mean} minutes (n=${labelled.count}), versus ${unlabelled.mean} minutes without tags (n=${unlabelled.count}).`):'';
+  const details=ranked.map(row=>`@${row.username} — ${summary(row)} ${dutch?'Recente tagdatums':'Recent tagged dates'}: ${[...new Set(row.dates)].slice(0,5).join(' · ')}`);
+  const dates=[...new Set(ranked.flatMap(row=>row.dates.slice(0,12)))].sort().reverse().slice(0,12);
   return {text:[lines.join('\n\n'),explanation+more,comparison].filter(Boolean).join('\n\n'),evidence:{label:source,dates,details}};
 }

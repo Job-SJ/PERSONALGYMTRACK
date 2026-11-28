@@ -29,15 +29,18 @@ test('Coach finds a training partner in the signed-in owner’s stored workouts'
   const answer=await request.post('/api/coach',{headers,data:{action:'send',id,turn,prompt:'Who do I usually train with?'}});
   expect(answer.status()).toBe(200);
   const result=await answer.json();
-  expect(result.turn.answer).toContain('**Alex** — 3 workouts (0.6%)');
-  expect(result.turn.answer).toContain('**R.J.** — 1 workout');
-  expect(result.turn.answer).not.toContain('Morgan');
+  expect(result.turn.answer).toContain('**@synthetic_partner7** — 3 workouts (0.6%)');
+  expect(result.turn.answer).toContain('**@synthetic.track2** — 1 workout');
+  expect(result.turn.answer).not.toContain('@synthetic_isolated');
   expect(result.turn.evidence.dates).toHaveLength(3);
   expect(result.turn.evidence.label).toContain('517 workouts');
-  expect(result.turn.evidence.details[0]).toContain('subtitle, inferred');
+  expect(result.turn.evidence.details[0]).toContain('Recent tagged dates');
   expect(result.turn.local_analysis).toBe(true);
+  const replay=await request.post('/api/coach',{headers,data:{action:'send',id,turn,prompt:'Who do I usually train with?'}});
+  expect(replay.status()).toBe(200);
+  expect((await replay.json()).turn).toEqual(result.turn);
   const persisted=await request.post('/api/coach',{headers,data:{action:'conversation',id}});
-  expect((await persisted.json()).turns[0].evidence).toEqual(result.turn.evidence);
+  expect((await persisted.json()).turns).toEqual([result.turn]);
   const crossAccount=await request.post('/api/coach',{
     headers:{Authorization:'Bearer '+accessToken(userTwo,'aal2')},data:{action:'conversation',id},
   });
@@ -60,7 +63,7 @@ test('signed-in dashboard, integrated Coach and notification center fit the view
   const theme=email==='one@example.invalid'?'dark':'light';
   await expect(page.locator('.workspace')).toHaveClass(new RegExp('theme-'+theme));
   await page.goto('/app/workouts/fixture-workout-0');
-  await expect(page.getByText(email==='one@example.invalid'?'Alex & R.J.':'Morgan',{exact:true})).toBeVisible();
+  await expect(page.getByText(email==='one@example.invalid'?'Great session (@Synthetic_Partner7) & @synthetic.track2':'@synthetic_isolated',{exact:true})).toBeVisible();
   await page.goto('/app');
   await page.getByRole('link',{name:'Open Coach'}).click();
   await expect(page.getByRole('heading',{name:'Coach',exact:true})).toBeVisible();
@@ -169,8 +172,13 @@ for(const theme of ['dark','light']) test(`Coach setup and free-text follow-ups 
   await page.getByRole('button',{name:'Save and enable Coach'}).click();
   const input=page.getByRole('textbox',{name:'Message Coach'});
   await input.fill('Compare my current training with my usual schedule.');
-  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await input.evaluate(element=>{
+    const form=(element as HTMLTextAreaElement).form!;
+    form.requestSubmit();
+    form.requestSubmit();
+  });
   await expect(page.locator('.coach-markdown strong')).toHaveText('two sessions');
+  await expect(page.locator('.coach-user')).toHaveCount(1);
   await input.fill('How about last month?');
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect.poll(()=>interrupted).toBe(true);
@@ -179,6 +187,7 @@ for(const theme of ['dark','light']) test(`Coach setup and free-text follow-ups 
   await expect(page.getByRole('region',{name:'Coach chat'}).getByRole('alert')).toHaveText('Generation stopped.');
   await page.getByRole('button',{name:'Retry reply'}).click();
   await expect(page.locator('.coach-markdown strong').last()).toHaveText('eight sessions');
+  await expect(page.locator('.coach-user')).toHaveCount(2);
   await page.getByRole('button',{name:'Rename',exact:true}).click();
   await page.getByRole('textbox',{name:'Conversation title'}).fill('Training review');
   await page.getByRole('button',{name:'Save',exact:true}).click();
@@ -193,6 +202,7 @@ for(const theme of ['dark','light']) test(`Coach setup and free-text follow-ups 
   await page.getByText('Chats',{exact:true}).click();
   await page.getByRole('button',{name:'Training review'}).click();
   await expect(page.getByText('How about last month?',{exact:true})).toBeVisible();
+  await expect(page.locator('.coach-user')).toHaveCount(2);
   await page.getByRole('button',{name:'Delete',exact:true}).click();
   await page.getByRole('button',{name:'Confirm deletion'}).click();
   await page.getByText('Chats',{exact:true}).click();
