@@ -1,12 +1,13 @@
-import {useEffect,useState,type ReactNode} from 'react';
+import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {Linking,Pressable,ScrollView,StatusBar,StyleSheet,Text,TextInput,View,useColorScheme} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import type {Session} from '@supabase/supabase-js';
 import * as Notifications from 'expo-notifications';
 import * as SecureStore from 'expo-secure-store';
-import type {FoodResults,MobileOverview,MobileTab} from '../lib/mobile-contract';
+import type {MobileOverview,MobileTab} from '../lib/mobile-contract';
 import {MobileCoach} from './Coach';
-import {sumPortions,type Food,type Meal,meals} from '../lib/nutrition';
+import {MobileMealPreview} from './MealPreview';
+import {portionValues,sumPortions} from '../lib/nutrition';
 import {categories,type Category} from '../lib/notification-rules';
 import {appUrl,mobileRequest,supabase} from './session';
 import {Button,palette,ui,type Palette} from './ui';
@@ -50,18 +51,15 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
   const [inbox,setInbox]=useState<Inbox>();
   const [error,setError]=useState('');
   const [note,setNote]=useState('');
-  const [query,setQuery]=useState('');
-  const [foods,setFoods]=useState<Food[]>([]);
-  const [food,setFood]=useState<Food>();
-  const [amount,setAmount]=useState('100');
-  const [meal,setMeal]=useState<Meal>('Lunch');
   const [weight,setWeight]=useState('');
+  const [hevyKey,setHevyKey]=useState('');
   const [enrollment,setEnrollment]=useState<{id:string;secret:string}>();
   const [verification,setVerification]=useState('');
   const [pushing,setPushing]=useState(false);
   const [running,setRunning]=useState<AbortController>();
+  const operation=useRef<AbortController|null>(null);
   const busy=Boolean(running);
-  const p=palette(data?.theme==='light'||(!data&&scheme==='light'));
+  const p=palette(data?.theme==='light'||(!data&&scheme==='light'),data?.theme==='oled');
   const text={color:p.text};
   useEffect(()=>{
     const controller=new AbortController();
@@ -84,13 +82,14 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
     return ()=>controller.abort();
   },[tab,session]);
   async function run(fn:(signal:AbortSignal)=>Promise<void>,done=''){
-    if(running) return;
+    if(operation.current) return;
     const controller=new AbortController();
+    operation.current=controller;
     setRunning(controller);
     setError('');setNote('');
-    try{await fn(controller.signal);if(!controller.signal.aborted)setNote(done);}
+    try{await fn(controller.signal);if(done&&!controller.signal.aborted)setNote(done);}
     catch(error){if(!controller.signal.aborted)setError(error instanceof Error?error.message:'Try again.');}
-    finally{setRunning(undefined);}
+    finally{operation.current=null;setRunning(undefined);}
   }
   const refresh=async(signal:AbortSignal)=>setData(await mobileRequest(session,'/api/mobile',undefined,signal));
   const write=(command:object,done:string)=>void run(async signal=>{
@@ -99,13 +98,14 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
   },done);
   const openWeb=(path:string)=>void Linking.openURL(appUrl+path).catch(()=>setError('Open the workspace in your browser.'));
   const macros=sumPortions(data?.entries.map(row=>row.portion)??[]);
+  const knownKcal=data?.entries.reduce((sum,row)=>sum+(portionValues(row.portion).kcal??0),0)??0;
   return <SafeAreaView style={[ui.safe,{backgroundColor:p.bg}]}>
-    <StatusBar barStyle={p.bg==='#f4f5ef'?'dark-content':'light-content'}/>
+    <StatusBar barStyle={p.onAccent==='#fff'?'dark-content':'light-content'}/>
     <View style={[style.header,{borderColor:p.line}]}>
       <Text style={{color:p.accent,fontWeight:'700'}}>PERSONALGYMTRACK</Text>
       <Button text={tab==='Settings'?'Refresh':'Settings'} p={p} disabled={busy} action={()=>tab==='Settings'?void run(refresh):setTab('Settings')}/>
     </View>
-    {tab==='Coach'?<MobileCoach session={session} p={p}/>:<ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={ui.content}>
+    {tab==='Coach'?<MobileCoach session={session} p={p} today={data?.today} refreshDiary={()=>void run(refresh)}/>:<ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={ui.content}>
       <Text style={[ui.title,text]}>{tab}</Text>
       {error&&<Text accessibilityLiveRegion="polite" style={[ui.text,text]}>{error}</Text>}
       {note&&<Text accessibilityLiveRegion="polite" style={[ui.text,text]}>{note}</Text>}
@@ -114,12 +114,24 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
       {tab==='Today'&&data&&<>
         <Panel title="Daily Intelligence" p={p}><Line p={p}>{data.summary}</Line>
           {data.headlines.map(row=><Line p={p} key={row.label}>{row.label} · {row.value}</Line>)}</Panel>
-        <Panel title="Nutrition today" p={p}><Line p={p}>{data.entries.length?macros.kcal==null?'Some calories are unknown.':`${Math.round(macros.kcal)} kcal logged.`:'Your diary is open.'}</Line>
+        <Panel title="Nutrition today" p={p}><Line p={p}>{data.entries.length?macros.kcal==null?`${Math.round(knownKcal)} known kcal logged.`:`${Math.round(macros.kcal)} kcal logged.`:'Your diary is open.'}</Line>
           <Button p={p} text="Open nutrition" action={()=>setTab('Nutrition')}/></Panel>
       </>}
       {tab==='Training'&&data&&<>
-        <Button p={p} accent text={data.hevyConnected?'Sync Hevy':'Connect Hevy in web settings'} disabled={busy}
-          action={()=>data.hevyConnected?write({action:'sync'},'Workout history updated.'):openWeb('/app/integrations')}/>
+        {data.hevyConnected?<Button p={p} accent text="Sync workouts" disabled={busy}
+          action={()=>write({action:'sync'},'Workout history updated.')}/>:data.hevyAvailable?
+          <Panel title="Connect Hevy" p={p}>
+            <TextInput accessibilityLabel="Hevy API key" value={hevyKey} onChangeText={setHevyKey} editable={!busy}
+              placeholder="Hevy API key" placeholderTextColor={p.muted} style={[ui.input,text,{borderColor:p.line}]}
+              secureTextEntry autoCapitalize="none" autoCorrect={false} maxLength={512}/>
+            <Button p={p} accent text="Connect and sync" disabled={busy||hevyKey.trim().length<8} action={()=>void run(async signal=>{
+              const key=hevyKey.trim();
+              setHevyKey('');
+              const result=await mobileRequest<{notice?:string}>(session,'/api/mobile',{action:'connect-hevy',key},signal);
+              await refresh(signal);
+              setNote(result.notice??'Hevy connected and workouts synced.');
+            })}/>
+          </Panel>:<Button p={p} text="Open Hevy settings" action={()=>openWeb('/app/integrations')}/>}
         {data.workouts.length===0&&<Line p={p}>Import or synchronize workouts to begin.</Line>}
         {data.workouts.map(row=><Panel title={row.title} p={p} key={row.id}><Line p={p}>{row.day} · {row.sets} working sets · {Math.round(row.minutes)} min</Line>
           {row.volume!==null&&<Line p={p}>{Math.round(row.volume).toLocaleString()} kg mapped volume</Line>}</Panel>)}
@@ -132,26 +144,7 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
           <Button p={p} text={data.complete?'Reopen diary':'Mark diary complete'} disabled={busy}
             action={()=>write({action:'nutrition',command:{type:'complete',day:data.today,complete:!data.complete}},'Diary updated.')}/>
         </Panel>
-        <Panel title="Log food" p={p}>
-          <Input p={p} label="Food name or barcode" value={query} set={setQuery}/>
-          <Button p={p} text="Search Open Food Facts" disabled={busy||query.trim().length<2} action={()=>void run(async signal=>{
-            const result=await mobileRequest<FoodResults>(session,'/api/mobile',{action:'food-search',query:query.trim(),
-              mode:/^\d{4,24}$/.test(query.trim())?'barcode':'name'},signal);
-            setFoods(result.foods.slice(0,12));
-            if(!result.foods.length)setNote('No matching products.');
-          })}/>
-          {foods.map((item,index)=><Button p={p} text={item.name} key={item.code??index} action={()=>{setFood(item);setAmount(item.basis==='serving'?'1':'100');setFoods([]);}}/>)}
-          {food&&<>
-            <Line p={p}>{food.name}</Line><Input p={p} numeric label={'Amount ('+food.basis+')'} value={amount} set={setAmount}/>
-            <View style={ui.row}>{meals.map(name=><Button p={p} key={name} text={name} accent={meal===name} action={()=>setMeal(name)}/>)}</View>
-            <Button p={p} accent text="Log food" disabled={busy||!(Number(amount)>0)} action={()=>void run(async signal=>{
-              await mobileRequest(session,'/api/mobile',{action:'nutrition',command:{type:'log',day:data.today,meal,
-                portions:[{food,amount:Number(amount),unit:food.basis}]}},signal);
-              setFood(undefined);
-              await refresh(signal);
-            },'Food logged.')}/>
-          </>}
-        </Panel>
+        <MobileMealPreview key={data.today} day={data.today} p={p} session={session} refresh={()=>void run(refresh)}/>
       </>}
       {tab==='Progress'&&data&&<>
         <Panel title="Training trends" p={p}>{data.headlines.map(row=><Line p={p} key={row.label}>{row.label} · {row.value}</Line>)}</Panel>
@@ -211,7 +204,7 @@ export function Workspace({session,signOut}:{session:Session;signOut:()=>Promise
     </ScrollView>}
     <View accessibilityRole="tablist" style={[style.tabs,{borderColor:p.line,backgroundColor:p.panel}]}>
       {tabs.filter(value=>value!=='Settings').map(value=><Pressable key={value} accessibilityRole="tab" accessibilityState={{selected:tab===value}}
-        style={style.tab} onPress={()=>{setError('');setNote('');setTab(value);}}>
+        style={[style.tab,tab===value&&{backgroundColor:p.raised,borderRadius:8}]} onPress={()=>{setError('');setNote('');setTab(value);}}>
         <Text style={{color:value===tab?p.accent:p.text,fontSize:12,fontWeight:'600'}}>{value}</Text>
       </Pressable>)}
     </View>

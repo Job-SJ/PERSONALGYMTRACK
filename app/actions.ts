@@ -7,6 +7,7 @@ import {z} from 'zod';
 import {configured,config,db,publicRegistration,session} from '../lib/supabase';
 import {hevy,HevyError} from '../lib/hevy';
 import {runSync} from '../lib/sync';
+import {connectHevy} from '../lib/hevy-connection';
 import {parseCsv} from '../lib/csv';
 import {integrationCredentials} from '../lib/integration-credentials';
 
@@ -106,7 +107,8 @@ export async function sync(form:FormData) {
   back('integrations',status);
 }
 export async function configureHevy(form:FormData) {
-  const credentials=integrationCredentials(await session(),'hevy');
+  const owner=await session();
+  const credentials=integrationCredentials(owner,'hevy');
   const mode=z.enum(['connect','disconnect','migrate']).safeParse(form.get('mode'));
   if(!mode.success) return back('integrations','Choose a valid connection action.');
   let status:string;
@@ -115,12 +117,14 @@ export async function configureHevy(form:FormData) {
       await credentials.disconnect();
       status='Hevy disconnected. Imported workouts are still available.';
     }else{
-      const key=z.string().trim().regex(/^[\x21-\x7e]{8,512}$/).safeParse(mode.data==='migrate' ? await credentials.read() : form.get('key'));
-      if(!key.success) throw new HevyError('Enter a valid Hevy API key.');
-      if(!await credentials.reserveCheck()) throw new HevyError('Wait 15 seconds before testing again.');
-      await hevy(key.data).test(AbortSignal.timeout(12000));
-      await credentials.save(key.data);
+      const initial=mode.data==='connect'&&!await credentials.connected();
+      const key=await connectHevy(owner,mode.data==='migrate'?await credentials.read():form.get('key'));
       status='Hevy connection verified and saved.';
+      if(initial){
+        try{await runSync(owner.client,owner.user.id,key);status='Hevy connected and workouts synced.';}
+        catch{status='Hevy connected. Use Sync workouts to retry the initial import.';}
+        revalidatePath('/app');
+      }
     }
   }catch(error){
     status=error instanceof HevyError ? error.message : 'Hevy settings could not be saved. Check instance configuration and try again.';

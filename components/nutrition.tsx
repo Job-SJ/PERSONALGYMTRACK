@@ -9,6 +9,7 @@ import {amount,macros,NutritionCharts,type Intake,type StrengthPoint} from './nu
 import {FoodEditor,FoodSearch,NutrientValues,PortionEditor,type RecentSearch} from './nutrition-food';
 import {NutritionTargets} from './nutrition-targets';
 import {adaptiveMaintenance} from '../lib/adaptive-nutrition';
+import {MealPreviewForm} from './meal-preview';
 
 type Props={today:string;entries:Entry[];targets:Target[];library:LibraryItem[];complete:string[];weights:Measurement[];strength:StrengthPoint[];setup?:boolean};
 type Draft={portion:Portion;id?:string;favoriteId?:string};
@@ -120,15 +121,17 @@ export function Nutrition({today,entries,targets,library,complete,weights,streng
     </div>
     {message&&<p className="notice nut-message" role="status">{message}</p>}
     {tab==='Diary'&&<>
+      {!setup&&<MealPreviewForm key={day} day={day} meal={meal} disabled={busy}/>}
       <div className="nut-grid nut-overview">
         <section className="panel nut-panel nut-energy">
           <div className="nut-ring" role="img" aria-label={target?`${Math.round(knownCalories/target.kcal*100)} percent of calorie target logged`:'No calorie target set'}>
             <svg viewBox="0 0 120 120" aria-hidden="true"><circle className="nut-ring-track" cx="60" cy="60" r="51" pathLength="100"/>
               <circle className="nut-ring-progress" cx="60" cy="60" r="51" pathLength="100" strokeDasharray={`${progress} 100`}/></svg>
-            <div><strong>{amount(knownCalories)}</strong><small>kcal logged</small></div>
+            <div><strong>{amount(knownCalories)}</strong><small>{daily.kcal==null?'known kcal':'kcal logged'}</small></div>
           </div>
           <div className="nut-energy-detail"><h2>Daily energy</h2>
-            {target?<><p><strong>{amount(Math.abs(remaining??0))} kcal</strong> {(remaining??0)<0?'over target':'remaining'}</p><small>{amount(target.kcal)} kcal target</small></>:
+            {target?<>{daily.kcal!=null&&<p><strong>{amount(Math.abs(remaining??0))} kcal</strong> {(remaining??0)<0?'over target':'remaining'}</p>}
+              <small>{amount(target.kcal)} kcal target</small></>:
               <button className="quiet" type="button" onClick={()=>changeTab('Targets')}>Set calorie target</button>}
             {daily.kcal==null&&<small>Some entries are missing calories. Only known values are included.</small>}
           </div>

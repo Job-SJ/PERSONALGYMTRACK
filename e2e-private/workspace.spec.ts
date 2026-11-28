@@ -16,8 +16,63 @@ test('native bearer authentication is isolated and checks authenticator assuranc
   expect((await two.json()).workouts[0].title).toBe('Maple session 1');
   expect((await request.get('/api/coach',{headers:headers(userTwo,'aal1')})).status()).toBe(403);
   expect((await request.post('/api/coach',{headers:headers(userTwo,'aal1'),data:{action:'conversations'}})).status()).toBe(403);
+  expect((await request.post('/api/mobile',{headers:headers(userTwo,'aal1'),data:{action:'connect-hevy',key:'synthetic-hevy-key'}})).status()).toBe(403);
   expect((await request.post('/api/coach',{headers:headers(userOne,'aal1'),data:{action:'send',prompt:'test'}})).status()).toBe(400);
   expect((await request.post('/api/jobs/notifications')).status()).toBe(401);
+});
+
+test('meal confirmation retries keep one owned batch through the mobile API',async({request},info)=>{
+  const headers={Authorization:'Bearer '+accessToken(userOne)};
+  const overview=await request.get('/api/mobile',{headers});
+  const {today}=await overview.json();
+  const name='Synthetic retry serving '+info.project.name;
+  const command={type:'confirm-meal',requestId:randomUUID(),day:today,meal:'Dinner',portions:[
+    {food:{name,source:'Custom label',preparation:'As sold',basis:'serving',values:{}},unit:'serving',amount:2},
+    {food:{name,source:'Custom label',preparation:'As sold',basis:'serving',values:{}},unit:'serving',amount:1},
+  ]};
+  const submit=()=>request.post('/api/mobile',{headers,data:{action:'nutrition',command}});
+  for(const response of await Promise.all([submit(),submit()])) expect(response.status()).toBe(200);
+  const saved=await request.get('/api/mobile',{headers});
+  expect((await saved.json()).entries.filter((row:{portion:{food:{name:string}}})=>row.portion.food.name===name)).toHaveLength(2);
+  const foreign=await request.get('/api/mobile',{headers:{Authorization:'Bearer '+accessToken(userTwo,'aal2')}});
+  expect((await foreign.json()).entries).toEqual([]);
+});
+
+test('editable meal preview writes only after confirmation',async({page,request},info)=>{
+  const name='Synthetic flakes '+info.project.name;
+  async function savedEntries(){
+    const response=await request.get('/api/mobile',{headers:{Authorization:'Bearer '+accessToken(userOne)}});
+    expect(response.status()).toBe(200);
+    const {entries,today}=await response.json();
+    return {today,entries:entries.filter((row:{portion:{food:{name:string}}})=>row.portion.food.name===name)};
+  }
+  await page.goto('/login');
+  await page.getByLabel('Email').fill('one@example.invalid');
+  await page.getByLabel('Password').fill('synthetic-password');
+  await page.getByRole('button',{name:'Sign in'}).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await page.route('**/api/mobile',async route=>{
+    if(route.request().postDataJSON()?.action!=='meal-preview') return route.continue();
+    return route.fulfill({json:{preview:{meal:'Lunch',lines:[{query:name,unit:'g',amount:40,selected:0,
+      foods:[{name,source:'Open Food Facts',preparation:'As sold',basis:'g',values:{kcal:350,protein:10,carbs:55,fat:8}}]}]}}});
+  });
+  await page.goto('/app/nutrition');
+  await page.getByRole('textbox',{name:'Describe a meal',exact:true}).fill('Lunch: 40g '+name);
+  await page.getByRole('button',{name:'Preview meal'}).click();
+  await expect(page.getByText(/Estimated 140 kcal/)).toBeVisible();
+  await page.getByLabel('Amount for '+name).fill('60');
+  await expect(page.getByText(/Estimated 210 kcal/)).toBeVisible();
+  await page.getByLabel('Preview meal slot').selectOption('Dinner');
+  const entry=page.locator('.nut-entry').filter({hasText:name});
+  await expect(entry).toHaveCount(0);
+  expect((await savedEntries()).entries).toEqual([]);
+  await page.getByRole('button',{name:'Confirm meal'}).click();
+  await expect(page.getByText('Meal logged.',{exact:true})).toBeVisible();
+  await expect(entry).toHaveCount(1);
+  await expect(entry).toContainText('60 g');
+  const {entries,today}=await savedEntries();
+  expect(entries).toHaveLength(1);
+  expect(entries[0]).toMatchObject({day:today,meal:'Dinner',portion:{amount:60,unit:'g',food:{name,values:{kcal:350}}}});
 });
 
 test('Coach finds a training partner in the signed-in owner’s stored workouts',async({request})=>{
@@ -171,6 +226,10 @@ for(const theme of ['dark','light']) test(`Coach setup and free-text follow-ups 
   await consent.check();
   await page.getByRole('button',{name:'Save and enable Coach'}).click();
   const input=page.getByRole('textbox',{name:'Message Coach'});
+  await input.fill('Log lunch: 40g synthetic oats');
+  await input.press('Enter');
+  await expect(page.getByRole('textbox',{name:'Describe a meal',exact:true})).toHaveValue('Log lunch: 40g synthetic oats');
+  await page.getByRole('button',{name:'Back to chat'}).click();
   await input.fill('Compare my current training with my usual schedule.');
   await input.evaluate(element=>{
     const form=(element as HTMLTextAreaElement).form!;

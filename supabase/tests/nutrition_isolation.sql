@@ -16,6 +16,10 @@ update public.nutrition_entries set meal='Lunch',portion=jsonb_set(portion,'{amo
 insert into public.nutrition_entries(user_id,day,meal,portion)
 select user_id,day,meal,portion from public.nutrition_entries;
 delete from public.nutrition_entries where id<>'30000000-0000-0000-0000-000000000003';
+-- A confirmation retry keeps the original portion under the owner-scoped key.
+insert into public.nutrition_entries(user_id,id,day,meal,portion)
+select user_id,id,day,meal,jsonb_set(portion,'{amount}','100') from public.nutrition_entries
+on conflict (user_id,id) do nothing;
 
 select set_config('request.jwt.claims','{"sub":"20000000-0000-0000-0000-000000000002","role":"authenticated","aal":"aal1"}',true);
 do $$
